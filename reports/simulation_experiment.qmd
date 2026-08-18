@@ -7,7 +7,7 @@ execute:
   message: false
 ---
 
-This report summarizes the full production study for the two antibiotic-resistant organism scenarios. It uses 10,000 independent simulations per scenario with 1,000 agents per simulation.
+This report summarizes the full production study for the two antibiotic-resistant organism scenarios. It uses 5,000 independent simulations per scenario with 5,000 agents per simulation and a 60-day horizon. Each simulation draws the agent feature from a standard normal distribution.
 
 ## Setup and execution
 
@@ -19,20 +19,21 @@ source("../R/simulate.R")
 
 config <- default_simulation_config()
 study <- load_simulation_batches(
-  manifest_path = "../data/derived/manifest.rds",
+  manifest_path = "../data/derived/production/manifest.rds",
   root_dir       = ".."
 )
 run_counts <- table(study$runs$scenario)
-if (!identical(as.integer(run_counts[c("lower", "higher")]), c(10000L, 10000L))) {
-  stop("The production manifest must contain 10,000 runs per scenario.")
+if (!identical(as.integer(run_counts[c("lower", "higher")]), c(5000L, 5000L))) {
+  stop("The production manifest must contain 5,000 runs per scenario.")
 }
 knitr::kable(data.frame(scenario = names(run_counts), runs = as.integer(run_counts)))
 ```
 
-The fixed 250-day safety horizon completed every higher-scenario run and 9,947 of 10,000 lower-scenario runs. Individual reproduction-number summaries exclude the 53 censored lower-scenario runs because some infectious agents remained active at the horizon. Infected agents with complete follow-up and zero secondary infections remain in the analysis.
+All populations still had active transmission at the fixed 60-day horizon. Completeness is therefore assessed per infected agent: recovered agents have a final individual reproduction count, while agents still exposed or infectious are censored. The individual summaries retain recovered agents, including those with zero secondary infections, and exclude only the active tail. The pseudo-source row identified by `source = -1` is excluded before individual outcomes are constructed.
 
 ```{r}
 with(study$runs, table(scenario, outcome_complete))
+with(study$agents, table(scenario, outcome_complete))
 analysis_agents <- study$agents[study$agents$outcome_complete, ]
 ```
 

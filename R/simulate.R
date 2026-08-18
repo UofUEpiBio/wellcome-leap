@@ -21,7 +21,11 @@ simulate_one <- function(
     seed <- as.integer(config$base_seed + scenario_offset + replicate_id)
   }
   set.seed(seed)
-  x <- stats::runif(config$n_agents)
+  x <- stats::rnorm(
+    config$n_agents,
+    mean = config$x_mean,
+    sd = config$x_sd
+  )
   bundle <- build_seirconn_model(config, scenario, x)
   epiworldR::run(bundle$model, ndays = config$max_days, seed = seed + 1L)
 
@@ -108,10 +112,10 @@ run_simulation_study <- function(
 #' @export
 run_simulation_batches <- function(
     config,
-    n_reps         = 10000L,
+    n_reps         = 5000L,
     batch_size     = 100L,
     workers        = 1L,
-    output_dir     = "data/derived",
+    output_dir     = "data/derived/production",
     reuse_existing = TRUE
 ) {
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
@@ -190,8 +194,8 @@ run_simulation_batches <- function(
 #' @return A list containing combined agent and run tables plus the manifest.
 #' @export
 load_simulation_batches <- function(
-    manifest_path = "data/derived/manifest.rds",
-    root_dir       = "."
+    manifest_path = "data/derived/production/manifest.rds",
+    root_dir      = "."
 ) {
   if (!file.exists(manifest_path)) {
     stop("Simulation manifest not found: ", manifest_path)

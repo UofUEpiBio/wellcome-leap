@@ -1,24 +1,26 @@
-#' Numerically stable log of one plus an exponential
-#'
-#' @param x Numeric vector.
-#'
-#' @return Numeric vector of `log(1 + exp(x))` values.
-log1pexp <- function(x) {
-  ifelse(x > 0, x + log1p(exp(-x)), log1p(exp(x)))
-}
-
-#' Mean logistic probability over a uniform feature
+#' Mean logistic probability over a normal feature
 #'
 #' @param intercept Logistic-model intercept.
-#' @param beta Coefficient for a Uniform(0, 1) feature.
+#' @param beta Coefficient for the normal feature.
+#' @param mean Feature-distribution mean.
+#' @param sd Feature-distribution standard deviation.
 #'
 #' @return Expected logistic probability.
-mean_logit_uniform <- function(
+mean_logit_normal <- function(
     intercept,
-    beta = 1
+    beta,
+    mean = 0,
+    sd   = 1
 ) {
-  if (beta == 0) return(stats::plogis(intercept))
-  (log1pexp(intercept + beta) - log1pexp(intercept)) / beta
+  stats::integrate(
+    function(x) {
+      stats::plogis(intercept + beta * x) * stats::dnorm(x, mean, sd)
+    },
+    lower = -Inf,
+    upper = Inf,
+    subdivisions = 200L,
+    rel.tol = 1e-9
+  )$value
 }
 
 #' Solve an analytic starting intercept for a target reproduction number
@@ -38,7 +40,12 @@ analytic_effective_intercept <- function(
   }
   stats::uniroot(
     function(intercept) {
-      mean_logit_uniform(intercept, config$beta_x) - target_mean_probability
+      mean_logit_normal(
+        intercept,
+        beta = config$beta_x,
+        mean = config$x_mean,
+        sd = config$x_sd
+      ) - target_mean_probability
     },
     interval = c(-20, 20)
   )$root

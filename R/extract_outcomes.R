@@ -1,3 +1,24 @@
+#' Exclude the epiworld seeding pseudo-source
+#'
+#' `epiworldR::run_multiple()` may represent initial infections with a
+#' pseudo-source whose `source` value is `-1`. That record is not an agent's
+#' realized reproduction number.
+#'
+#' @param reproduction Reproductive-number data containing a `source` column.
+#'
+#' @return The reproductive-number data restricted to nonnegative agent IDs.
+#' @export
+exclude_seed_pseudo_source <- function(reproduction) {
+  if (!"source" %in% names(reproduction)) {
+    stop("reproduction must contain a source column.")
+  }
+  reproduction[
+    !is.na(reproduction$source) & reproduction$source >= 0,
+    ,
+    drop = FALSE
+  ]
+}
+
 #' Extract individual and run-level transmission outcomes
 #'
 #' @param model_bundle List returned by [build_seirconn_model()].
@@ -17,10 +38,15 @@ extract_simulation_results <- function(
   model <- model_bundle$model
   agent_data <- model_bundle$agent_data
   reproduction <- epiworldR::get_reproductive_number(model)
+  reproduction <- exclude_seed_pseudo_source(reproduction)
   transmissions <- epiworldR::get_transmissions(model)
   history <- epiworldR::get_hist_total(model)
+  final_states <- epiworldR::get_agents_states(model)
 
   nonseed_edges <- transmissions[transmissions$source >= 0, , drop = FALSE]
+  if (any(reproduction$source < 0)) {
+    stop("Pseudo-source seeding rows must not enter individual outcomes.")
+  }
   if (sum(reproduction$rt) != nrow(nonseed_edges)) {
     stop("Reproductive-number counts do not match non-seed transmission edges.")
   }
@@ -45,6 +71,8 @@ extract_simulation_results <- function(
   ]
   idx <- match(reproduction$source, agent_data$agent_id)
   n_infected <- nrow(reproduction)
+  agent_final_state <- final_states[reproduction$source + 1L]
+  agent_outcome_complete <- !agent_final_state %in% c("Exposed", "Infected")
   agents <- data.frame(
     run_id = rep(run_id, n_infected),
     seed = rep(seed, n_infected),
@@ -56,7 +84,8 @@ extract_simulation_results <- function(
     infection_day = reproduction$source_exposure_date,
     source_id = infection_edge$source,
     secondary_cases = reproduction$rt,
-    outcome_complete = rep(run_complete, n_infected),
+    final_state = agent_final_state,
+    outcome_complete = agent_outcome_complete,
     early_phase = reproduction$source_exposure_date <= early_last_day,
     final_epidemic_size = rep(n_infected, n_infected),
     extinct_early = rep(nrow(nonseed_edges) == 0L, n_infected),
@@ -74,8 +103,10 @@ extract_simulation_results <- function(
     active_at_end = active_end,
     outcome_complete = run_complete,
     extinct_early = nrow(nonseed_edges) == 0L,
-    early_mean_ri = if (any(agents$early_phase)) {
-      mean(agents$secondary_cases[agents$early_phase])
+    early_mean_ri = if (any(agents$early_phase & agents$outcome_complete)) {
+      mean(agents$secondary_cases[
+        agents$early_phase & agents$outcome_complete
+      ])
     } else {
       NA_real_
     },

@@ -1,18 +1,29 @@
 testthat::test_that("analytic starting parameters match requested targets", {
   config <- default_simulation_config()
   pars <- analytic_starting_parameters(config)
-  testthat::expect_equal(unname(pars[["alpha"]]), -2.2636, tolerance = 1e-3)
+  testthat::expect_equal(unname(pars[["alpha"]]), -2.0478, tolerance = 1e-3)
   testthat::expect_gt(pars[["delta_scenario"]], 0)
 })
 
 testthat::test_that("transmission probability increases with x and scenario", {
   config <- default_simulation_config()
-  x <- c(0, 0.5, 1)
+  x <- c(-1, 0, 1)
   low <- transmission_probability(x, "lower", config)
   high <- transmission_probability(x, "higher", config)
   testthat::expect_true(all(diff(low) > 0))
   testthat::expect_true(all(high > low))
   testthat::expect_true(all(c(low, high) > 0 & c(low, high) < 1))
+})
+
+testthat::test_that("seeding pseudo-source rows are excluded", {
+  reproduction <- data.frame(
+    source = c(-1L, 0L, 1L),
+    rt = c(2L, 1L, 0L)
+  )
+  filtered <- exclude_seed_pseudo_source(reproduction)
+
+  testthat::expect_equal(filtered$source, c(0L, 1L))
+  testthat::expect_true(all(filtered$source >= 0L))
 })
 
 testthat::test_that("ModelSEIRCONN callback and extraction agree with edges", {
@@ -28,7 +39,9 @@ testthat::test_that("ModelSEIRCONN callback and extraction agree with edges", {
     sum(result$transmissions$source >= 0)
   )
   testthat::expect_true(any(result$agents$secondary_cases == 0))
-  testthat::expect_true(all(result$agents$x >= 0 & result$agents$x <= 1))
+  testthat::expect_true(any(result$agents$x < 0))
+  testthat::expect_true(any(result$agents$x > 0))
+  testthat::expect_true(all(result$agents$agent_id >= 0))
 })
 
 testthat::test_that("simulation is reproducible", {
