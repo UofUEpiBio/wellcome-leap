@@ -1,0 +1,97 @@
+validate_simulation_config <- function(config) {
+  required <- c(
+    "n_agents", "prevalence", "contact_rate", "incubation_days",
+    "recovery_rate", "beta_x", "alpha", "delta_scenario", "max_days",
+    "early_susceptible_fraction", "base_seed"
+  )
+  missing <- setdiff(required, names(config))
+  if (length(missing)) {
+    stop("Missing configuration fields: ", paste(missing, collapse = ", "))
+  }
+  if (config$n_agents < 2L) stop("n_agents must be at least 2.")
+  if (config$prevalence <= 0 || config$prevalence >= 1) {
+    stop("prevalence must be strictly between 0 and 1.")
+  }
+  probability_fields <- c("recovery_rate", "early_susceptible_fraction")
+  for (field in probability_fields) {
+    if (config[[field]] <= 0 || config[[field]] >= 1) {
+      stop(field, " must be strictly between 0 and 1.")
+    }
+  }
+  invisible(config)
+}
+
+scenario_info <- function(scenario) {
+  scenarios <- scenario_table()
+  idx <- match(scenario, scenarios$scenario)
+  if (is.na(idx)) {
+    stop("scenario must be one of: ", paste(scenarios$scenario, collapse = ", "))
+  }
+  scenarios[idx, , drop = FALSE]
+}
+
+transmission_probability <- function(x, scenario, config) {
+  info <- scenario_info(scenario)
+  stats::plogis(
+    config$alpha +
+      config$beta_x * x +
+      config$delta_scenario * info$scenario_high
+  )
+}
+
+build_seirconn_model <- function(config, scenario, x) {
+  validate_simulation_config(config)
+  info <- scenario_info(scenario)
+  if (length(x) != config$n_agents) {
+    stop("x must contain one value per agent.")
+  }
+  if (any(!is.finite(x)) || any(x < 0 | x > 1)) {
+    stop("x must contain finite values in [0, 1].")
+  }
+  if (!requireNamespace("epiworldR", quietly = TRUE)) {
+    stop("The epiworldR package is required. Run scripts/00_install_dependencies.R.")
+  }
+
+  agents <- cbind(
+    intercept = 1,
+    x = as.numeric(x),
+    scenario_high = rep(info$scenario_high, config$n_agents)
+  )
+
+  model <- epiworldR::ModelSEIRCONN(
+    name = info$organism,
+    n = config$n_agents,
+    prevalence = config$prevalence,
+    contact_rate = config$contact_rate,
+    transmission_rate = stats::plogis(config$alpha),
+    incubation_days = config$incubation_days,
+    recovery_rate = config$recovery_rate
+  )
+  epiworldR::verbose_off(model)
+  epiworldR::set_agents_data(model, agents)
+
+  transmission_fun <- epiworldR::virus_fun_logit(
+    vars = c(0L, 1L, 2L),
+    coefs = c(config$alpha, config$beta_x, config$delta_scenario),
+    model = model
+  )
+  epiworldR::set_prob_infecting_fun(
+    virus = epiworldR::get_virus(model, 0),
+    model = model,
+    vfun = transmission_fun
+  )
+
+  list(
+    model = model,
+    agent_data = data.frame(
+      agent_id = seq_len(config$n_agents) - 1L,
+      x = x,
+      scenario = scenario,
+      scenario_high = info$scenario_high,
+      organism = info$organism,
+      p_transmit = transmission_probability(x, scenario, config),
+      stringsAsFactors = FALSE
+    )
+  )
+}
+
