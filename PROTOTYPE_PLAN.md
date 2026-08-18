@@ -296,8 +296,7 @@ wellcome-leap/
 │   └── README.md
 └── reports/
     ├── simulation_experiment.qmd
-    ├── ml_experiment.qmd
-    └── prediction_example.qmd
+    └── ml_experiment.qmd
 ```
 
 Generated simulation data should be excluded from version control unless a small example dataset is deliberately committed.
