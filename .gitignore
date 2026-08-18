@@ -1,0 +1,23 @@
+.DS_Store
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+
+# Generated simulation outputs
+data/derived/
+data/*.rds
+data/*.csv
+data/*.parquet
+
+# Trained models and evaluation artifacts
+artifacts/*.pt
+artifacts/*.pth
+artifacts/*.rds
+artifacts/*.csv
+
+# Quarto and test caches
+reports/_freeze/
+reports/*_files/
+tests/testthat/_snaps/
+
