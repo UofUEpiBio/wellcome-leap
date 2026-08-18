@@ -1,3 +1,8 @@
+#' Default simulation configuration
+#'
+#' @return A named list of epidemiological, calibration, and reproducibility
+#'   settings for the toy experiment.
+#' @export
 default_simulation_config <- function() {
   list(
     n_agents = 1000L,
@@ -15,6 +20,11 @@ default_simulation_config <- function() {
   )
 }
 
+#' Scenario metadata
+#'
+#' @return A two-row data frame mapping scenario labels to numeric indicators
+#'   and organism labels.
+#' @export
 scenario_table <- function() {
   data.frame(
     scenario = c("lower", "higher"),
@@ -23,4 +33,3 @@ scenario_table <- function() {
     stringsAsFactors = FALSE
   )
 }
-

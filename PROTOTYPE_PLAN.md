@@ -199,6 +199,13 @@ Calibration will occur before the 10,000-run production stage.
 - Check for probability saturation or invalid values.
 - Confirm that results are stable across parallel worker counts.
 
+### Phase E: Quarto simulation report
+
+- Run a reproducible inspection experiment from `reports/simulation_experiment.qmd` rather than an ad hoc analysis script.
+- Render with `format: gfm` and commit the resulting Markdown and figure assets, but not the underlying simulated agent data.
+- Report the number of infected agents, mean, standard deviation, median, interquartile range, selected quantiles, and zero-secondary-infection fraction by scenario.
+- Plot the overall distribution of individual \(R_i\) values by scenario and summarize achieved early-epidemic reproduction numbers.
+
 ## 7. Missing-data ML surrogate
 
 ### Prediction target and split
@@ -247,14 +254,14 @@ Missing inputs cannot be reconstructed from nothing. When scenario is absent, an
 
 Report performance separately for each observation pattern and scenario:
 
-- mean absolute error;
+- mean absolute error (MAE), the primary predictive-performance statistic;
 - root mean squared error;
 - Poisson deviance or negative-binomial log score;
 - calibration of predicted versus observed mean counts;
 - performance for zero versus nonzero secondary transmission; and
 - uncertainty intervals or bootstrap intervals for aggregate metrics.
 
-Also compare ML predictions with the known conditional simulation relationship. Because the simulator is the ground truth in this toy study, recovery of the correct monotonic effect and sensible degradation under masking are more important than maximizing a single accuracy score.
+Use a run-level 70% training, 15% validation, and 15% test split. The ML Quarto report must show the split sizes, training/validation loss history, stopping epoch, and test MAE for: both \(X\) and scenario, \(X\) only, and scenario only. Also compare predictions with the known conditional simulation relationship. Because the simulator is the ground truth in this toy study, recovery of the correct monotonic effect and sensible degradation under masking are more important than maximizing a single accuracy score.
 
 ## 8. Proposed repository structure
 
@@ -263,6 +270,7 @@ wellcome-leap/
 ├── AGENTS.md
 ├── FullProposal.md
 ├── PROTOTYPE_PLAN.md
+├── README.qmd
 ├── README.md
 ├── config/
 │   └── simulation.R
@@ -287,6 +295,8 @@ wellcome-leap/
 ├── artifacts/
 │   └── README.md
 └── reports/
+    ├── simulation_experiment.qmd
+    ├── ml_experiment.qmd
     └── prediction_example.qmd
 ```
 

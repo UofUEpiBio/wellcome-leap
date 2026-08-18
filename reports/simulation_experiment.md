@@ -1,0 +1,166 @@
+# AMPLIFY simulation experiment
+
+
+This report runs a reproducible inspection study for the two
+antibiotic-resistant organism scenarios. It uses 100 independent
+simulations per scenario with 1,000 agents per simulation. The
+production experiment increases this to 10,000 simulations per scenario
+using the same functions.
+
+## Setup and execution
+
+``` r
+source("../config/simulation.R")
+source("../R/build_model.R")
+source("../R/extract_outcomes.R")
+source("../R/simulate.R")
+
+config <- default_simulation_config()
+study <- run_simulation_study(
+  config,
+  n_reps  = 100L,
+  workers = 1L
+)
+```
+
+All reported individual outcomes have complete follow-up through the
+fixed 250-day safety horizon.
+
+``` r
+with(study$runs, table(scenario, outcome_complete))
+```
+
+            outcome_complete
+    scenario TRUE
+      higher  100
+      lower   100
+
+## Individual reproduction-number distribution
+
+The target is each infected agent’s realized number of secondary
+infections, (R_i), including zero.
+
+``` r
+#' Summarize an individual reproduction-number sample
+#'
+#' @param data Agent-level simulation data for one scenario.
+#'
+#' @return A one-row data frame of distribution summaries.
+summarize_ri <- function(data) {
+  quantiles <- stats::quantile(
+    data$secondary_cases,
+    probs = c(0.05, 0.25, 0.50, 0.75, 0.95)
+  )
+  data.frame(
+    infected_agents = nrow(data),
+    mean_ri = mean(data$secondary_cases),
+    sd_ri = stats::sd(data$secondary_cases),
+    p05 = quantiles[[1]],
+    p25 = quantiles[[2]],
+    median = quantiles[[3]],
+    p75 = quantiles[[4]],
+    p95 = quantiles[[5]],
+    zero_fraction = mean(data$secondary_cases == 0)
+  )
+}
+
+ri_summary <- do.call(
+  rbind,
+  lapply(split(study$agents, study$agents$scenario), summarize_ri)
+)
+ri_summary$scenario <- rownames(ri_summary)
+rownames(ri_summary) <- NULL
+ri_summary <- ri_summary[c("scenario", setdiff(names(ri_summary), "scenario"))]
+knitr::kable(ri_summary, digits = 3)
+```
+
+| scenario | infected_agents | mean_ri | sd_ri | p05 | p25 | median | p75 | p95 | zero_fraction |
+|:---------|----------------:|--------:|------:|----:|----:|-------:|----:|----:|--------------:|
+| higher   |           78623 |   0.987 | 1.421 |   0 |   0 |      1 |   1 |   4 |         0.499 |
+| lower    |           55332 |   0.982 | 1.381 |   0 |   0 |      1 |   1 |   4 |         0.491 |
+
+``` r
+boxplot(
+  secondary_cases ~ scenario,
+  data = study$agents,
+  outline = FALSE,
+  xlab = "Scenario",
+  ylab = "Individual secondary infections (Ri)",
+  col = c("#6baed6", "#fd8d3c")
+)
+```
+
+![Distribution of individual secondary infections by organism
+scenario.](simulation_experiment_files/figure-commonmark/unnamed-chunk-4-1.png)
+
+The next plot retains the large mass at zero and groups the upper tail
+for readability.
+
+``` r
+ri_group <- pmin(study$agents$secondary_cases, 7L)
+distribution <- prop.table(
+  table(study$agents$scenario, factor(ri_group, levels = 0:7)),
+  margin = 1
+)
+barplot(
+  distribution,
+  beside = TRUE,
+  names.arg = c(as.character(0:6), "7+"),
+  legend.text = rownames(distribution),
+  args.legend = list(x = "topright", bty = "n"),
+  xlab = "Individual secondary infections (Ri)",
+  ylab = "Fraction of infected agents",
+  col = c("#fd8d3c", "#6baed6")
+)
+```
+
+![Probability mass of individual secondary infections, with values of 7
+or more
+grouped.](simulation_experiment_files/figure-commonmark/unnamed-chunk-5-1.png)
+
+## Early-epidemic reproduction
+
+Calibration uses agents infected while at least 90% of the population
+remains susceptible. The table reports both the pooled early-agent mean
+and the distribution of run-level early means.
+
+``` r
+early_agents <- study$agents[study$agents$early_phase, ]
+pooled_early <- do.call(rbind, lapply(split(early_agents, early_agents$scenario), function(x) {
+  data.frame(
+    scenario = x$scenario[[1]],
+    mean_ri = mean(x$secondary_cases),
+    se = stats::sd(x$secondary_cases) / sqrt(nrow(x)),
+    infected_agents = nrow(x)
+  )
+}))
+run_early <- do.call(rbind, lapply(split(study$runs, study$runs$scenario), function(x) {
+  data.frame(
+    scenario = x$scenario[[1]],
+    mean_run_ri = mean(x$early_mean_ri),
+    sd_run_ri = stats::sd(x$early_mean_ri),
+    runs = nrow(x)
+  )
+}))
+rownames(pooled_early) <- NULL
+rownames(run_early) <- NULL
+knitr::kable(pooled_early, digits = 3)
+```
+
+| scenario | mean_ri |    se | infected_agents |
+|:---------|--------:|------:|----------------:|
+| higher   |   1.761 | 0.021 |            9497 |
+| lower    |   1.390 | 0.018 |            9266 |
+
+``` r
+knitr::kable(run_early, digits = 3)
+```
+
+| scenario | mean_run_ri | sd_run_ri | runs |
+|:---------|------------:|----------:|-----:|
+| higher   |       1.748 |     0.254 |  100 |
+| lower    |       1.354 |     0.262 |  100 |
+
+These values are expected to vary around the targets because this is a
+finite stochastic model. The calibration script refines the scenario
+intercepts with larger Monte Carlo batches before the production run.

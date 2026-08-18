@@ -1,13 +1,37 @@
+#' Numerically stable log of one plus an exponential
+#'
+#' @param x Numeric vector.
+#'
+#' @return Numeric vector of `log(1 + exp(x))` values.
 log1pexp <- function(x) {
   ifelse(x > 0, x + log1p(exp(-x)), log1p(exp(x)))
 }
 
-mean_logit_uniform <- function(intercept, beta = 1) {
+#' Mean logistic probability over a uniform feature
+#'
+#' @param intercept Logistic-model intercept.
+#' @param beta Coefficient for a Uniform(0, 1) feature.
+#'
+#' @return Expected logistic probability.
+mean_logit_uniform <- function(
+    intercept,
+    beta = 1
+) {
   if (beta == 0) return(stats::plogis(intercept))
   (log1pexp(intercept + beta) - log1pexp(intercept)) / beta
 }
 
-analytic_effective_intercept <- function(target_r0, config) {
+#' Solve an analytic starting intercept for a target reproduction number
+#'
+#' @param target_r0 Target early-epidemic reproduction number.
+#' @param config Named simulation-configuration list.
+#'
+#' @return Numeric effective intercept.
+#' @export
+analytic_effective_intercept <- function(
+    target_r0,
+    config
+) {
   target_mean_probability <- target_r0 * config$recovery_rate / config$contact_rate
   if (target_mean_probability <= 0 || target_mean_probability >= 1) {
     stop("The requested target implies an invalid mean transmission probability.")
@@ -20,13 +44,30 @@ analytic_effective_intercept <- function(target_r0, config) {
   )$root
 }
 
+#' Calculate analytic scenario starting parameters
+#'
+#' @param config Named simulation-configuration list.
+#'
+#' @return Named numeric vector containing `alpha` and `delta_scenario`.
+#' @export
 analytic_starting_parameters <- function(config) {
   low <- analytic_effective_intercept(config$target_r0[["lower"]], config)
   high <- analytic_effective_intercept(config$target_r0[["higher"]], config)
   c(alpha = low, delta_scenario = high - low)
 }
 
-set_effective_intercept <- function(config, scenario, intercept) {
+#' Set a scenario's effective transmission intercept
+#'
+#' @param config Named simulation-configuration list.
+#' @param scenario Character scenario label.
+#' @param intercept Numeric effective intercept.
+#'
+#' @return Updated configuration list.
+set_effective_intercept <- function(
+    config,
+    scenario,
+    intercept
+) {
   if (scenario == "lower") {
     config$alpha <- intercept
   } else if (scenario == "higher") {
@@ -37,10 +78,27 @@ set_effective_intercept <- function(config, scenario, intercept) {
   config
 }
 
-estimate_early_reproduction <- function(config, scenario, n_reps = 200L,
-                                        workers = 1L) {
+#' Estimate early-epidemic reproduction in simulation
+#'
+#' @param config Named simulation-configuration list.
+#' @param scenario Character scenario label.
+#' @param n_reps Number of simulation replicates.
+#' @param workers Number of parallel workers.
+#'
+#' @return Named numeric vector with the mean, standard error, agent count, and
+#'   complete-run count.
+#' @export
+estimate_early_reproduction <- function(
+    config,
+    scenario,
+    n_reps  = 200L,
+    workers = 1L
+) {
   result <- run_simulation_study(
-    config, n_reps = n_reps, scenarios = scenario, workers = workers
+    config,
+    n_reps   = n_reps,
+    scenarios = scenario,
+    workers   = workers
   )
   eligible <- result$agents$outcome_complete & result$agents$early_phase
   values <- result$agents$secondary_cases[eligible]
@@ -52,9 +110,27 @@ estimate_early_reproduction <- function(config, scenario, n_reps = 200L,
   )
 }
 
-calibrate_scenario <- function(config, scenario, target_r0, n_reps = 200L,
-                               iterations = 5L, workers = 1L,
-                               half_width = 0.6) {
+#' Calibrate one scenario's transmission intercept
+#'
+#' @param config Named simulation-configuration list.
+#' @param scenario Character scenario label.
+#' @param target_r0 Target early-epidemic reproduction number.
+#' @param n_reps Replicates per calibration candidate.
+#' @param iterations Number of bounded-search iterations.
+#' @param workers Number of parallel workers.
+#' @param half_width Initial half-width around the analytic intercept.
+#'
+#' @return A list containing the selected effective intercept and search history.
+#' @export
+calibrate_scenario <- function(
+    config,
+    scenario,
+    target_r0,
+    n_reps     = 200L,
+    iterations = 5L,
+    workers    = 1L,
+    half_width = 0.6
+) {
   center <- analytic_effective_intercept(target_r0, config)
   lower <- center - half_width
   upper <- center + half_width
@@ -64,7 +140,10 @@ calibrate_scenario <- function(config, scenario, target_r0, n_reps = 200L,
     candidate <- (lower + upper) / 2
     candidate_config <- set_effective_intercept(config, scenario, candidate)
     estimate <- estimate_early_reproduction(
-      candidate_config, scenario, n_reps = n_reps, workers = workers
+      candidate_config,
+      scenario,
+      n_reps = n_reps,
+      workers = workers
     )
     history[[iteration]] <- data.frame(
       iteration = iteration,
@@ -87,14 +166,37 @@ calibrate_scenario <- function(config, scenario, target_r0, n_reps = 200L,
   )
 }
 
-calibrate_scenarios <- function(config, n_reps = 200L, iterations = 5L,
-                                workers = 1L) {
+#' Calibrate both organism scenarios
+#'
+#' @param config Named simulation-configuration list.
+#' @param n_reps Replicates per calibration candidate.
+#' @param iterations Number of bounded-search iterations.
+#' @param workers Number of parallel workers.
+#'
+#' @return A list containing the calibrated configuration and combined history.
+#' @export
+calibrate_scenarios <- function(
+    config,
+    n_reps     = 200L,
+    iterations = 5L,
+    workers    = 1L
+) {
   low <- calibrate_scenario(
-    config, "lower", config$target_r0[["lower"]], n_reps, iterations, workers
+    config,
+    "lower",
+    config$target_r0[["lower"]],
+    n_reps,
+    iterations,
+    workers
   )
   config$alpha <- low$effective_intercept
   high <- calibrate_scenario(
-    config, "higher", config$target_r0[["higher"]], n_reps, iterations, workers
+    config,
+    "higher",
+    config$target_r0[["higher"]],
+    n_reps,
+    iterations,
+    workers
   )
   config$delta_scenario <- high$effective_intercept - config$alpha
   list(
@@ -102,4 +204,3 @@ calibrate_scenarios <- function(config, n_reps = 200L, iterations = 5L,
     history = rbind(low$history, high$history)
   )
 }
-

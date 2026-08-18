@@ -1,5 +1,21 @@
-simulate_one <- function(config, scenario, replicate_id, seed = NULL,
-                         keep_transmissions = FALSE) {
+#' Simulate one heterogeneous SEIR epidemic
+#'
+#' @param config Named simulation-configuration list.
+#' @param scenario Character scenario label.
+#' @param replicate_id Positive integer replicate identifier.
+#' @param seed Optional integer random seed.
+#' @param keep_transmissions Whether to retain the transmission-edge table.
+#'
+#' @return A list containing agent outcomes, a run summary, and optionally
+#'   transmission edges.
+#' @export
+simulate_one <- function(
+    config,
+    scenario,
+    replicate_id,
+    seed               = NULL,
+    keep_transmissions = FALSE
+) {
   if (is.null(seed)) {
     scenario_offset <- if (scenario == "higher") 100000000L else 0L
     seed <- as.integer(config$base_seed + scenario_offset + replicate_id)
@@ -19,8 +35,24 @@ simulate_one <- function(config, scenario, replicate_id, seed = NULL,
   result
 }
 
-run_simulation_study <- function(config, n_reps, scenarios = c("lower", "higher"),
-                                 workers = 1L, keep_transmissions = FALSE) {
+#' Run an in-memory simulation study
+#'
+#' @param config Named simulation-configuration list.
+#' @param n_reps Number of replicates per scenario.
+#' @param scenarios Character vector of scenario labels.
+#' @param workers Number of parallel workers.
+#' @param keep_transmissions Whether to retain transmission-edge tables.
+#'
+#' @return A list containing combined agent and run tables and, when requested,
+#'   transmission edges.
+#' @export
+run_simulation_study <- function(
+    config,
+    n_reps,
+    scenarios          = c("lower", "higher"),
+    workers            = 1L,
+    keep_transmissions = FALSE
+) {
   tasks <- expand.grid(
     replicate_id = seq_len(n_reps),
     scenario = scenarios,
@@ -62,8 +94,23 @@ run_simulation_study <- function(config, n_reps, scenarios = c("lower", "higher"
   out
 }
 
-run_simulation_batches <- function(config, n_reps = 10000L, batch_size = 100L,
-                                   workers = 1L, output_dir = "data/derived") {
+#' Run and save a batched simulation study
+#'
+#' @param config Named simulation-configuration list.
+#' @param n_reps Number of replicates per scenario.
+#' @param batch_size Number of replicates per saved batch.
+#' @param workers Number of parallel workers.
+#' @param output_dir Directory for ignored generated RDS files.
+#'
+#' @return A data frame manifest of generated batch files.
+#' @export
+run_simulation_batches <- function(
+    config,
+    n_reps     = 10000L,
+    batch_size = 100L,
+    workers    = 1L,
+    output_dir = "data/derived"
+) {
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
   manifest <- list()
   for (scenario in c("lower", "higher")) {

@@ -1,4 +1,19 @@
-extract_simulation_results <- function(model_bundle, config, run_id, seed) {
+#' Extract individual and run-level transmission outcomes
+#'
+#' @param model_bundle List returned by [build_seirconn_model()].
+#' @param config Named simulation-configuration list.
+#' @param run_id Unique simulation-run identifier.
+#' @param seed Integer random seed used to construct the run.
+#'
+#' @return A list containing agent outcomes, a run summary, and transmission
+#'   edges.
+#' @export
+extract_simulation_results <- function(
+    model_bundle,
+    config,
+    run_id,
+    seed
+) {
   model <- model_bundle$model
   agent_data <- model_bundle$agent_data
   reproduction <- epiworldR::get_reproductive_number(model)
@@ -68,4 +83,3 @@ extract_simulation_results <- function(model_bundle, config, run_id, seed) {
 
   list(agents = agents, runs = run, transmissions = transmissions)
 }
-
