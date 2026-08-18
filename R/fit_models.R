@@ -70,6 +70,8 @@ poisson_loss_matrix <- function(
 #' @param max_epochs Maximum number of training epochs.
 #' @param patience Early-stopping patience in epochs.
 #' @param seed Integer R and torch seed.
+#' @param modality_dropout_probabilities Named probabilities for retaining both
+#'   modalities, only `X`, or only scenario during each training observation.
 #'
 #' @return A list containing the best model, training history, and architecture.
 #' @export
@@ -77,22 +79,26 @@ train_masked_torch <- function(
     training_data,
     validation_data,
     preprocessor,
-    hidden_dim_1  = 16L,
-    hidden_dim_2  = 8L,
-    learning_rate = 0.01,
-    batch_size    = 2048L,
-    max_epochs    = 100L,
-    patience      = 10L,
-    seed          = 20260818L
+    hidden_dim_1                   = 16L,
+    hidden_dim_2                   = 8L,
+    learning_rate                  = 0.01,
+    batch_size                     = 2048L,
+    max_epochs                     = 100L,
+    patience                       = 10L,
+    seed                           = 20260818L,
+    modality_dropout_probabilities = default_modality_dropout_probabilities()
 ) {
   set.seed(seed)
   torch::torch_manual_seed(seed)
-  training <- augment_mask_patterns(training_data, preprocessor)
-  validation <- augment_mask_patterns(validation_data, preprocessor)
+  training <- list(
+    x = make_masked_matrix(training_data, "both", preprocessor),
+    y = as.numeric(training_data$secondary_cases)
+  )
   model <- create_masked_count_model(
     input_dim = ncol(training$x),
     hidden_dim_1 = hidden_dim_1,
-    hidden_dim_2 = hidden_dim_2
+    hidden_dim_2 = hidden_dim_2,
+    modality_dropout_probabilities = modality_dropout_probabilities
   )
   optimizer <- torch::optim_adam(model$parameters, lr = learning_rate)
 
@@ -129,11 +135,20 @@ train_masked_torch <- function(
       total_training_loss <- total_training_loss + loss$item() * length(idx)
     }
 
-    validation_loss <- poisson_loss_matrix(
-      model,
-      validation$x,
-      validation$y,
-      batch_size = batch_size
+    validation_losses <- vapply(
+      names(modality_dropout_probabilities),
+      function(pattern) {
+        poisson_loss_matrix(
+          model,
+          make_masked_matrix(validation_data, pattern, preprocessor),
+          validation_data$secondary_cases,
+          batch_size = batch_size
+        )
+      },
+      numeric(1)
+    )
+    validation_loss <- sum(
+      validation_losses * modality_dropout_probabilities
     )
     history[[epoch]] <- data.frame(
       epoch = epoch,
@@ -160,7 +175,8 @@ train_masked_torch <- function(
     architecture = list(
       input_dim = ncol(training$x),
       hidden_dim_1 = hidden_dim_1,
-      hidden_dim_2 = hidden_dim_2
+      hidden_dim_2 = hidden_dim_2,
+      modality_dropout_probabilities = modality_dropout_probabilities
     )
   )
 }
@@ -177,20 +193,23 @@ train_masked_torch <- function(
 #' @param max_epochs Maximum number of epochs.
 #' @param patience Early-stopping patience.
 #' @param seed Integer split and training seed.
+#' @param modality_dropout_probabilities Named probabilities for the three
+#'   supported modality states during training.
 #'
 #' @return A fitted-model bundle with model, metadata, split data, and history.
 #' @export
 fit_masked_model <- function(
     data,
-    train_fraction      = 0.70,
-    validation_fraction = 0.15,
-    hidden_dim_1        = 16L,
-    hidden_dim_2        = 8L,
-    learning_rate       = 0.01,
-    batch_size          = 2048L,
-    max_epochs          = 100L,
-    patience            = 10L,
-    seed                = 20260818L
+    train_fraction                 = 0.70,
+    validation_fraction            = 0.15,
+    hidden_dim_1                   = 16L,
+    hidden_dim_2                   = 8L,
+    learning_rate                  = 0.01,
+    batch_size                     = 2048L,
+    max_epochs                     = 100L,
+    patience                       = 10L,
+    seed                           = 20260818L,
+    modality_dropout_probabilities = default_modality_dropout_probabilities()
 ) {
   data <- data[data$outcome_complete, , drop = FALSE]
   split <- split_by_run(data, train_fraction, validation_fraction, seed)
@@ -205,13 +224,15 @@ fit_masked_model <- function(
     batch_size = batch_size,
     max_epochs = max_epochs,
     patience = patience,
-    seed = seed
+    seed = seed,
+    modality_dropout_probabilities = modality_dropout_probabilities
   )
   metadata <- list(
     preprocessor = preprocessor,
     architecture = trained$architecture,
     split_run_ids = split$run_ids,
     supported_patterns = c("both", "x_only", "scenario_only"),
+    modality_dropout_probabilities = modality_dropout_probabilities,
     target = "secondary_cases",
     seed = seed
   )
@@ -224,14 +245,14 @@ fit_masked_model <- function(
   )
 }
 
-#' Evaluate masked prediction MAE
+#' Evaluate masked prediction RMSE
 #'
 #' @param fit Fitted bundle returned by [fit_masked_model()].
 #' @param data Optional evaluation data; defaults to the test split.
 #'
-#' @return A data frame of MAE values by observation pattern and scenario.
+#' @return A data frame of RMSE values by observation pattern and scenario.
 #' @export
-evaluate_masked_mae <- function(
+evaluate_masked_rmse <- function(
     fit,
     data = NULL
 ) {
@@ -248,7 +269,7 @@ evaluate_masked_mae <- function(
         pattern = pattern,
         scenario = group,
         n = sum(idx),
-        mae = mean(abs(prediction[idx] - data$secondary_cases[idx])),
+        rmse = sqrt(mean((prediction[idx] - data$secondary_cases[idx])^2)),
         stringsAsFactors = FALSE
       )
     }
@@ -299,7 +320,8 @@ load_masked_model <- function(
   model <- create_masked_count_model(
     input_dim = architecture$input_dim,
     hidden_dim_1 = architecture$hidden_dim_1,
-    hidden_dim_2 = architecture$hidden_dim_2
+    hidden_dim_2 = architecture$hidden_dim_2,
+    modality_dropout_probabilities = architecture$modality_dropout_probabilities
   )
   state <- torch::torch_load(weights_path, device = "cpu")
   model$load_state_dict(state)

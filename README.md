@@ -16,17 +16,17 @@ The prototype:
     only, or scenario only.
 
 The transmission probability is
-`plogis(alpha + beta * X_i + delta * S_s)`, where `X_i` is Uniform(0,
-1), and `S_s` distinguishes the organism scenarios.
+`plogis(alpha + beta * X_i + delta * S_s)`, where `X_i` is standard
+normal and `S_s` distinguishes the organism scenarios.
 
 ## Prototype workflow
 
 ``` mermaid
 flowchart LR
-  A["Calibrated SEIR parameters"] --> B["Simulate 10,000 populations per scenario"]
+  A["Calibrated SEIR parameters"] --> B["Simulate 5,000 populations per scenario"]
   B --> C["Agent outcomes: X, scenario, and individual Ri"]
   C --> D["70/15/15 run-level split"]
-  D --> E["Training data masking"]
+  D --> E["Random modality dropout during training"]
   E --> E1["X and scenario"]
   E --> E2["X only"]
   E --> E3["Scenario only"]
@@ -61,8 +61,8 @@ workflow is:
 
 ``` sh
 Rscript scripts/01_smoke_test.R
-Rscript scripts/02_calibrate.R 200 4
-Rscript scripts/03_run_production.R 10000 8 500
+Rscript scripts/02_calibrate.R 200 8
+Rscript scripts/03_run_production.R 5000 8 100
 ```
 
 Generated simulation data are written under ignored `data/derived/`
@@ -71,9 +71,9 @@ paths.
 ## ML experiment
 
 The [masked ML experiment](reports/ml_experiment.md) documents the
-70/15/15 run-level split, training and validation history, and test MAE
-for all three input patterns. Rendering it also creates ignored local
-weights and metadata used below:
+70/15/15 run-level split, modality dropout, training and validation
+history, and test RMSE for all three input patterns. Rendering it also
+creates ignored local weights and metadata used below:
 
 ``` sh
 quarto render reports/ml_experiment.qmd --to gfm
@@ -81,16 +81,18 @@ quarto render reports/ml_experiment.qmd --to gfm
 
 ## Prediction examples
 
-This example simulates scenario 1 (`lower`) with 1,000 agents whose
+This example simulates scenario 1 (`lower`) with 5,000 agents whose
 feature is fixed at `X = 0.1`. Fixing `X` gives enough infected
 observations at exactly that value to calculate an empirical individual
 reproduction count. The example uses `epiworldR::run_multiple()` for 100
-replicate populations and up to eight threads.
+replicate populations and up to eight threads. It removes the
+`source = -1` pseudo-source row before calculating the empirical value.
 
 ``` r
 library(torch)
 source("config/simulation.R")
 source("R/build_model.R")
+source("R/extract_outcomes.R")
 source("R/masking.R")
 source("R/torch_model.R")
 source("R/fit_models.R")
@@ -118,9 +120,7 @@ multiple_results <- epiworldR::run_multiple_get_results(
   scenario_1$model,
   nthreads = min(8L, parallel::detectCores())
 )
-individual_rt <- multiple_results$reproductive[
-  multiple_results$reproductive$source >= 0,
-]
+individual_rt <- exclude_seed_pseudo_source(multiple_results$reproductive)
 empirical_mean_rt <- mean(individual_rt$rt)
 
 model <- load_masked_model(
@@ -131,8 +131,12 @@ model <- load_masked_model(
 
 The same pretrained model is evaluated with `X` only, scenario only, and
 both inputs. A missing input is marginalized through the corresponding
-masks learned during training. The empirical column is repeated to make
-each prediction directly comparable with the controlled simulation.
+modality-dropout state learned during training. The `run_multiple()`
+empirical value is the cumulative secondary-case count observed through
+day 60; unlike the production extractor, its saved reproductive table
+does not expose per-agent terminal states for censoring. The empirical
+column is repeated to make each prediction directly comparable with the
+controlled simulation.
 
 ``` r
 prediction_table <- rbind(
@@ -168,17 +172,17 @@ knitr::kable(
     "X",
     "Scenario",
     "Infected observations",
-    "Empirical mean Rt",
+    "Empirical mean Ri at day 60",
     "Predicted mean Ri"
   )
 )
 ```
 
-| Model inputs | X | Scenario | Infected observations | Empirical mean Rt | Predicted mean Ri |
+| Model inputs | X | Scenario | Infected observations | Empirical mean Ri at day 60 | Predicted mean Ri |
 |:---|---:|:---|---:|---:|---:|
-| x_only | 0.1 | NA | 17808 | 0.944 | 0.693 |
-| scenario_only | NA | lower | 17808 | 0.944 | 0.984 |
-| both | 0.1 | lower | 17808 | 0.944 | 0.688 |
+| x_only | 0.1 | NA | 137930 | 0.964 | 0.916 |
+| scenario_only | NA | lower | 137930 | 0.964 | 1.091 |
+| both | 0.1 | lower | 137930 | 0.964 | 0.917 |
 
 ## Repository documents
 

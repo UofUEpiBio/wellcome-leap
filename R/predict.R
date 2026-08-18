@@ -1,7 +1,7 @@
 #' Predict an individual's expected secondary infections
 #'
 #' @param object Fitted or loaded masked-model bundle.
-#' @param x Optional numeric vector of agent features in `[0, 1]`.
+#' @param x Optional numeric vector of finite agent features.
 #' @param scenario Optional character vector containing `lower` or `higher`.
 #'
 #' @return A data frame containing supplied inputs, observation pattern, and
