@@ -107,8 +107,7 @@ make_masked_matrix <- function(
 #' @param preprocessor Training-derived preprocessing metadata.
 #' @param target Name of the count target column.
 #'
-#' @return A list containing an augmented input matrix, target vector, and mask
-#'   labels.
+#' @return A list containing an augmented input matrix and target vector.
 #' @export
 augment_mask_patterns <- function(
     data,
@@ -121,8 +120,7 @@ augment_mask_patterns <- function(
   })
   list(
     x = do.call(rbind, inputs),
-    y = rep(as.numeric(data[[target]]), times = length(patterns)),
-    pattern = rep(patterns, each = nrow(data))
+    y = rep(as.numeric(data[[target]]), times = length(patterns))
   )
 }
 

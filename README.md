@@ -19,6 +19,24 @@ The transmission probability is
 `plogis(alpha + beta * X_i + delta * S_s)`, where `X_i` is Uniform(0,
 1), and `S_s` distinguishes the organism scenarios.
 
+## Prototype workflow
+
+``` mermaid
+flowchart LR
+  A["Calibrated SEIR parameters"] --> B["Simulate 10,000 populations per scenario"]
+  B --> C["Agent outcomes: X, scenario, and individual Ri"]
+  C --> D["70/15/15 run-level split"]
+  D --> E["Training data masking"]
+  E --> E1["X and scenario"]
+  E --> E2["X only"]
+  E --> E3["Scenario only"]
+  E1 --> F["Train and validate R torch model"]
+  E2 --> F
+  E3 --> F
+  F --> G["Save pretrained weights and preprocessing metadata"]
+  G --> H["Predict with both inputs or either input alone"]
+```
+
 ## Installation
 
 Install the two runtime dependencies and the native LibTorch runtime:
@@ -44,7 +62,7 @@ workflow is:
 ``` sh
 Rscript scripts/01_smoke_test.R
 Rscript scripts/02_calibrate.R 200 4
-Rscript scripts/03_run_production.R 10000 4 100
+Rscript scripts/03_run_production.R 10000 8 500
 ```
 
 Generated simulation data are written under ignored `data/derived/`
@@ -63,14 +81,47 @@ quarto render reports/ml_experiment.qmd --to gfm
 
 ## Prediction examples
 
-Load the public wrapper and locally generated model:
+This example simulates scenario 1 (`lower`) with 1,000 agents whose
+feature is fixed at `X = 0.1`. Fixing `X` gives enough infected
+observations at exactly that value to calculate an empirical individual
+reproduction count. The example uses `epiworldR::run_multiple()` for 100
+replicate populations and up to eight threads.
 
 ``` r
 library(torch)
+source("config/simulation.R")
+source("R/build_model.R")
 source("R/masking.R")
 source("R/torch_model.R")
 source("R/fit_models.R")
 source("R/predict.R")
+
+config <- readRDS("data/derived/calibration.rds")$config
+x_value <- 0.1
+scenario_value <- "lower"
+scenario_1 <- build_seirconn_model(
+  config,
+  scenario = scenario_value,
+  x        = rep(x_value, config$n_agents)
+)
+saver <- epiworldR::make_saver("reproductive")
+epiworldR::run_multiple(
+  scenario_1$model,
+  ndays    = config$max_days,
+  nsims    = 100L,
+  seed     = config$base_seed,
+  saver    = saver,
+  verbose  = FALSE,
+  nthreads = min(8L, parallel::detectCores())
+)
+multiple_results <- epiworldR::run_multiple_get_results(
+  scenario_1$model,
+  nthreads = min(8L, parallel::detectCores())
+)
+individual_rt <- multiple_results$reproductive[
+  multiple_results$reproductive$source >= 0,
+]
+empirical_mean_rt <- mean(individual_rt$rt)
 
 model <- load_masked_model(
   weights_path  = "artifacts/masked_model.pt",
@@ -78,52 +129,56 @@ model <- load_masked_model(
 )
 ```
 
-### Example 1: `X` only
-
-When scenario is unavailable, the result averages over the scenario mix
-learned during training.
+The same pretrained model is evaluated with `X` only, scenario only, and
+both inputs. A missing input is marginalized through the corresponding
+masks learned during training. The empirical column is repeated to make
+each prediction directly comparable with the controlled simulation.
 
 ``` r
-predict_secondary_cases(
-  model,
-  x = 0.80
+prediction_table <- rbind(
+  predict_secondary_cases(
+    model,
+    x = x_value
+  ),
+  predict_secondary_cases(
+    model,
+    scenario = scenario_value
+  ),
+  predict_secondary_cases(
+    model,
+    x        = x_value,
+    scenario = scenario_value
+  )
+)
+prediction_table$infected_observations <- nrow(individual_rt)
+prediction_table$empirical_mean_rt <- empirical_mean_rt
+prediction_table <- prediction_table[c(
+  "observation_pattern",
+  "x",
+  "scenario",
+  "infected_observations",
+  "empirical_mean_rt",
+  "predicted_secondary_cases"
+)]
+knitr::kable(
+  prediction_table,
+  digits = 3,
+  col.names = c(
+    "Model inputs",
+    "X",
+    "Scenario",
+    "Infected observations",
+    "Empirical mean Rt",
+    "Predicted mean Ri"
+  )
 )
 ```
 
-        x scenario observation_pattern predicted_secondary_cases
-    1 0.8     <NA>              x_only                  1.250876
-
-### Example 2: scenario only
-
-When `X` is unavailable, the result averages over the training
-distribution of `X` for that scenario.
-
-``` r
-predict_secondary_cases(
-  model,
-  scenario = "higher"
-)
-```
-
-       x scenario observation_pattern predicted_secondary_cases
-    1 NA   higher       scenario_only                 0.9749071
-
-### Example 3: `X` and scenario
-
-Providing both supported inputs produces the most specific prediction.
-
-``` r
-predict_secondary_cases(
-  model,
-  x = 0.80,
-  scenario = "higher"
-)
-```
-
-        x scenario observation_pattern predicted_secondary_cases
-    1 0.8   higher                both                  1.213123
-
-The wrapper also accepts vectors and returns one prediction per row.
+| Model inputs | X | Scenario | Infected observations | Empirical mean Rt | Predicted mean Ri |
+|:---|---:|:---|---:|---:|---:|
+| x_only | 0.1 | NA | 17808 | 0.944 | 0.693 |
+| scenario_only | NA | lower | 17808 | 0.944 | 0.984 |
+| both | 0.1 | lower | 17808 | 0.944 | 0.688 |
 
 ## Repository documents
 
