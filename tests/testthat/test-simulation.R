@@ -41,3 +41,32 @@ testthat::test_that("simulation is reproducible", {
   testthat::expect_identical(a$runs, b$runs)
 })
 
+testthat::test_that("production batches can be reused and loaded", {
+  config <- default_simulation_config()
+  config$n_agents <- 50L
+  config$max_days <- 30L
+  output_dir <- tempfile("simulation-batches-")
+  first_manifest <- run_simulation_batches(
+    config,
+    n_reps         = 3L,
+    batch_size     = 2L,
+    workers        = 1L,
+    output_dir     = output_dir,
+    reuse_existing = TRUE
+  )
+  second_manifest <- run_simulation_batches(
+    config,
+    n_reps         = 3L,
+    batch_size     = 2L,
+    workers        = 1L,
+    output_dir     = output_dir,
+    reuse_existing = TRUE
+  )
+  study <- load_simulation_batches(
+    manifest_path = file.path(output_dir, "manifest.rds")
+  )
+
+  testthat::expect_identical(first_manifest, second_manifest)
+  testthat::expect_equal(nrow(study$runs), 6L)
+  testthat::expect_equal(length(unique(study$runs$run_id)), 6L)
+})

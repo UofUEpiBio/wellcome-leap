@@ -44,9 +44,10 @@ extract_simulation_results <- function(
     drop = FALSE
   ]
   idx <- match(reproduction$source, agent_data$agent_id)
+  n_infected <- nrow(reproduction)
   agents <- data.frame(
-    run_id = run_id,
-    seed = seed,
+    run_id = rep(run_id, n_infected),
+    seed = rep(seed, n_infected),
     scenario = agent_data$scenario[idx],
     organism = agent_data$organism[idx],
     agent_id = reproduction$source,
@@ -55,10 +56,10 @@ extract_simulation_results <- function(
     infection_day = reproduction$source_exposure_date,
     source_id = infection_edge$source,
     secondary_cases = reproduction$rt,
-    outcome_complete = run_complete,
+    outcome_complete = rep(run_complete, n_infected),
     early_phase = reproduction$source_exposure_date <= early_last_day,
-    final_epidemic_size = nrow(reproduction),
-    extinct_early = nrow(nonseed_edges) == 0L,
+    final_epidemic_size = rep(n_infected, n_infected),
+    extinct_early = rep(nrow(nonseed_edges) == 0L, n_infected),
     stringsAsFactors = FALSE
   )
 
