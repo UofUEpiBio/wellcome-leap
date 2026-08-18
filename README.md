@@ -1,42 +1,134 @@
 # AMPLIFY Computational Prototype
 
-This repository contains a toy computational prototype for the AMPLIFY Wellcome Leap proposal. It demonstrates how a mechanistic agent-based disease-transmission simulation can generate training data for a missing-data-aware machine-learning surrogate.
 
-The prototype has three parts:
+This repository contains a toy computational prototype for the AMPLIFY
+Wellcome Leap proposal. It connects a mechanistic agent-based
+disease-transmission simulation to a missing-data-aware machine-learning
+surrogate.
 
-1. simulate two antibiotic-resistant organism scenarios with `epiworldR::ModelSEIRCONN()`;
-2. learn individual realized secondary infections, \(R_i\), from an agent feature \(X\) and the organism scenario using native R `torch`; and
-3. expose a prediction wrapper that works when both inputs are available or when only \(X\) or scenario is available.
+The prototype:
 
-The transmission probability is modeled as
+1.  simulates two antibiotic-resistant organism scenarios with
+    `epiworldR::ModelSEIRCONN()`;
+2.  learns individual realized secondary infections, `R_i`, from an
+    agent feature `X` and organism scenario using native R `torch`; and
+3.  provides one prediction wrapper that works with both inputs, `X`
+    only, or scenario only.
 
-\[
-P(\text{transmission}_{is})=
-\operatorname{logit}^{-1}(\alpha+\beta X_i+\delta S_s),
-\]
+The transmission probability is
+`plogis(alpha + beta * X_i + delta * S_s)`, where `X_i` is Uniform(0,
+1), and `S_s` distinguishes the organism scenarios.
 
-where \(X_i\sim U(0,1)\) and \(S_s\) distinguishes the two organism scenarios. Scenario parameters will be calibrated toward early-epidemic reproduction numbers near 1.5 and 2.0.
+## Installation
 
-## Project status
+Install the two runtime dependencies and the native LibTorch runtime:
 
-The scientific and implementation plan is documented in [PROTOTYPE_PLAN.md](PROTOTYPE_PLAN.md). Implementation proceeds in three independently testable phases: simulation and calibration, masked R `torch` training, and prediction/reporting.
+``` r
+install.packages(c("epiworldR", "torch"))
+torch::install_torch()
+```
 
-Generated simulation data and trained model artifacts are intentionally excluded from version control.
+The repository also provides:
 
-## Simulation quick start
+``` sh
+Rscript scripts/00_install_dependencies.R
+```
 
-From the repository root:
+## Simulation experiments
 
-```sh
+The inspectable [simulation
+experiment](reports/simulation_experiment.md) is generated from Quarto
+and reports the overall `R_i` distribution by scenario. The production
+workflow is:
+
+``` sh
 Rscript scripts/01_smoke_test.R
 Rscript scripts/02_calibrate.R 200 4
 Rscript scripts/03_run_production.R 10000 4 100
 ```
 
-The calibration command accepts the number of replicates per candidate and worker count. The production command accepts replicates per scenario, workers, and batch size. Outputs are written under the ignored `data/derived/` directory.
+Generated simulation data are written under ignored `data/derived/`
+paths.
+
+## ML experiment
+
+The [masked ML experiment](reports/ml_experiment.md) documents the
+70/15/15 run-level split, training and validation history, and test MAE
+for all three input patterns. Rendering it also creates ignored local
+weights and metadata used below:
+
+``` sh
+quarto render reports/ml_experiment.qmd --to gfm
+```
+
+## Prediction examples
+
+Load the public wrapper and locally generated model:
+
+``` r
+library(torch)
+source("R/masking.R")
+source("R/torch_model.R")
+source("R/fit_models.R")
+source("R/predict.R")
+
+model <- load_masked_model(
+  weights_path  = "artifacts/masked_model.pt",
+  metadata_path = "artifacts/masked_model_metadata.rds"
+)
+```
+
+### Example 1: `X` only
+
+When scenario is unavailable, the result averages over the scenario mix
+learned during training.
+
+``` r
+predict_secondary_cases(
+  model,
+  x = 0.80
+)
+```
+
+        x scenario observation_pattern predicted_secondary_cases
+    1 0.8     <NA>              x_only                  1.250876
+
+### Example 2: scenario only
+
+When `X` is unavailable, the result averages over the training
+distribution of `X` for that scenario.
+
+``` r
+predict_secondary_cases(
+  model,
+  scenario = "higher"
+)
+```
+
+       x scenario observation_pattern predicted_secondary_cases
+    1 NA   higher       scenario_only                 0.9749071
+
+### Example 3: `X` and scenario
+
+Providing both supported inputs produces the most specific prediction.
+
+``` r
+predict_secondary_cases(
+  model,
+  x = 0.80,
+  scenario = "higher"
+)
+```
+
+        x scenario observation_pattern predicted_secondary_cases
+    1 0.8   higher                both                  1.213123
+
+The wrapper also accepts vectors and returns one prediction per row.
 
 ## Repository documents
 
-- [FullProposal.md](FullProposal.md): grant narrative and scientific context.
-- [PROTOTYPE_PLAN.md](PROTOTYPE_PLAN.md): modeling decisions, calibration design, ML design, and implementation gates.
+- [FullProposal.md](FullProposal.md): grant narrative and scientific
+  context.
+- [PROTOTYPE_PLAN.md](PROTOTYPE_PLAN.md): modeling, calibration, and ML
+  design.
 - [AGENTS.md](AGENTS.md): durable instructions for AI contributors.
