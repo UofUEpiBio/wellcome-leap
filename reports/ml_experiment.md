@@ -6,14 +6,17 @@ predictions under three observation patterns: both `X` and scenario, `X`
 only, and scenario only. Mean absolute error (MAE) is the primary
 predictive-performance statistic.
 
-## Data generation
+## Production simulation data
 
-The inspection experiment simulates 40 independent populations per
-organism scenario. The same code operates on the larger production
-batches without changing the model definition.
+The model is trained on the completed outcomes from all 10,000
+production simulations per organism scenario. Each simulation contains
+1,000 agents; only infected agents enter the individual
+reproduction-number dataset, including infected agents with zero
+secondary infections.
 
 ``` r
 library(torch)
+torch_set_num_threads(min(8L, parallel::detectCores()))
 source("../config/simulation.R")
 source("../R/build_model.R")
 source("../R/extract_outcomes.R")
@@ -23,12 +26,17 @@ source("../R/torch_model.R")
 source("../R/fit_models.R")
 
 config <- default_simulation_config()
-study <- run_simulation_study(
-  config,
-  n_reps  = 40L,
-  workers = 1L
+study <- load_simulation_batches(
+  manifest_path = "../data/derived/manifest.rds",
+  root_dir       = ".."
 )
+run_counts <- table(study$runs$scenario)
+if (!identical(as.integer(run_counts[c("lower", "higher")]), c(10000L, 10000L))) {
+  stop("The production manifest must contain 10,000 runs per scenario.")
+}
 agents <- study$agents[study$agents$outcome_complete, ]
+rm(study)
+invisible(gc())
 ```
 
 ## Run-level train, validation, and test split
@@ -45,9 +53,9 @@ fit <- fit_masked_model(
   hidden_dim_1        = 16L,
   hidden_dim_2        = 8L,
   learning_rate       = 0.01,
-  batch_size          = 4096L,
-  max_epochs          = 80L,
-  patience            = 8L,
+  batch_size          = 131072L,
+  max_epochs          = 30L,
+  patience            = 5L,
   seed                = 20260818L
 )
 
@@ -68,11 +76,11 @@ rownames(split_summary) <- NULL
 knitr::kable(split_summary)
 ```
 
-| partition  | runs | infected_agents | lower_agents | higher_agents |
-|:-----------|-----:|----------------:|-------------:|--------------:|
-| train      |   56 |           37217 |        15464 |         21753 |
-| validation |   12 |            7235 |         3234 |          4001 |
-| test       |   12 |            8169 |         3500 |          4669 |
+| partition  |  runs | infected_agents | lower_agents | higher_agents |
+|:-----------|------:|----------------:|-------------:|--------------:|
+| train      | 13962 |        10347605 |      4409152 |       5938453 |
+| validation |  2992 |         2213966 |       939898 |       1274068 |
+| test       |  2993 |         2216968 |       945221 |       1271747 |
 
 Each training observation is presented under all three masks. The four
 network inputs are standardized `X`, encoded scenario, and the two
@@ -85,7 +93,7 @@ softplus output trained with Poisson negative log-likelihood.
 fit$best_epoch
 ```
 
-    [1] 3
+    [1] 1
 
 ``` r
 knitr::kable(head(fit$history, 5), digits = 4)
@@ -93,11 +101,11 @@ knitr::kable(head(fit$history, 5), digits = 4)
 
 | epoch | training_loss | validation_loss |
 |------:|--------------:|----------------:|
-|     1 |        0.9921 |          0.9828 |
-|     2 |        0.9828 |          0.9821 |
-|     3 |        0.9825 |          0.9820 |
-|     4 |        0.9826 |          0.9821 |
-|     5 |        0.9823 |          0.9823 |
+|     1 |        0.9837 |          0.9825 |
+|     2 |        0.9826 |          0.9825 |
+|     3 |        0.9826 |          0.9825 |
+|     4 |        0.9826 |          0.9826 |
+|     5 |        0.9826 |          0.9825 |
 
 ``` r
 knitr::kable(tail(fit$history, 5), digits = 4)
@@ -105,11 +113,11 @@ knitr::kable(tail(fit$history, 5), digits = 4)
 
 |     | epoch | training_loss | validation_loss |
 |:----|------:|--------------:|----------------:|
-| 7   |     7 |        0.9822 |          0.9821 |
-| 8   |     8 |        0.9823 |          0.9821 |
-| 9   |     9 |        0.9823 |          0.9825 |
-| 10  |    10 |        0.9823 |          0.9822 |
-| 11  |    11 |        0.9823 |          0.9821 |
+| 2   |     2 |        0.9826 |          0.9825 |
+| 3   |     3 |        0.9826 |          0.9825 |
+| 4   |     4 |        0.9826 |          0.9826 |
+| 5   |     5 |        0.9826 |          0.9825 |
+| 6   |     6 |        0.9826 |          0.9825 |
 
 ``` r
 matplot(
@@ -142,17 +150,17 @@ mae <- evaluate_masked_mae(fit)
 knitr::kable(mae, digits = 3)
 ```
 
-| pattern       | scenario |    n |   mae |
-|:--------------|:---------|-----:|------:|
-| both          | overall  | 8169 | 1.011 |
-| both          | higher   | 4669 | 1.010 |
-| both          | lower    | 3500 | 1.013 |
-| x_only        | overall  | 8169 | 1.016 |
-| x_only        | higher   | 4669 | 1.014 |
-| x_only        | lower    | 3500 | 1.018 |
-| scenario_only | overall  | 8169 | 0.993 |
-| scenario_only | higher   | 4669 | 0.993 |
-| scenario_only | lower    | 3500 | 0.994 |
+| pattern       | scenario |       n |   mae |
+|:--------------|:---------|--------:|------:|
+| both          | overall  | 2216968 | 1.000 |
+| both          | higher   | 1271747 | 1.009 |
+| both          | lower    |  945221 | 0.988 |
+| x_only        | overall  | 2216968 | 0.999 |
+| x_only        | higher   | 1271747 | 1.009 |
+| x_only        | lower    |  945221 | 0.986 |
+| scenario_only | overall  | 2216968 | 0.979 |
+| scenario_only | higher   | 1271747 | 0.987 |
+| scenario_only | lower    |  945221 | 0.967 |
 
 The overall comparison requested for the prediction interface is:
 
@@ -162,22 +170,21 @@ rownames(overall_mae) <- NULL
 knitr::kable(overall_mae, digits = 3)
 ```
 
-| pattern       |    n |   mae |
-|:--------------|-----:|------:|
-| both          | 8169 | 1.011 |
-| x_only        | 8169 | 1.016 |
-| scenario_only | 8169 | 0.993 |
+| pattern       |       n |   mae |
+|:--------------|--------:|------:|
+| both          | 2216968 | 1.000 |
+| x_only        | 2216968 | 0.999 |
+| scenario_only | 2216968 | 0.979 |
 
-In this inspection run, scenario-only input has the smallest MAE,
-although the three values are close. This is a useful diagnostic rather
-than evidence that masking improves information. In a completed finite
-epidemic, the average offspring count across all infected agents is
-structurally pulled toward one, and unmodeled epidemic timing and
-susceptible depletion account for substantial individual variation. The
-network is also fitted with Poisson loss rather than directly minimizing
-MAE. A later extension could add infection time or susceptible fraction,
-or define a separate early-phase prediction target, while retaining the
-same masking interface.
+Differences between the three MAE values quantify the predictive cost of
+masking each input. In a completed finite epidemic, the average
+offspring count across all infected agents is structurally pulled toward
+one, and unmodeled epidemic timing and susceptible depletion account for
+substantial individual variation. The network is also fitted with
+Poisson loss rather than directly minimizing MAE. A later extension
+could add infection time or susceptible fraction, or define a separate
+early-phase prediction target, while retaining the same masking
+interface.
 
 The incomplete-input estimates are population averages over the missing
 feature. In particular, an `X`-only prediction cannot identify the
