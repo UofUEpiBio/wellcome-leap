@@ -1,3 +1,8 @@
+#' Validate simulation configuration
+#'
+#' @param config Named simulation-configuration list.
+#'
+#' @return The configuration invisibly; throws an error for invalid settings.
 validate_simulation_config <- function(config) {
   required <- c(
     "n_agents", "prevalence", "contact_rate", "incubation_days",
@@ -21,6 +26,11 @@ validate_simulation_config <- function(config) {
   invisible(config)
 }
 
+#' Look up scenario metadata
+#'
+#' @param scenario Character scenario label.
+#'
+#' @return A one-row scenario metadata data frame.
 scenario_info <- function(scenario) {
   scenarios <- scenario_table()
   idx <- match(scenario, scenarios$scenario)
@@ -30,7 +40,19 @@ scenario_info <- function(scenario) {
   scenarios[idx, , drop = FALSE]
 }
 
-transmission_probability <- function(x, scenario, config) {
+#' Calculate agent-specific transmission probabilities
+#'
+#' @param x Numeric vector of agent features in `[0, 1]`.
+#' @param scenario Character scenario label.
+#' @param config Named simulation-configuration list.
+#'
+#' @return A numeric vector of per-contact transmission probabilities.
+#' @export
+transmission_probability <- function(
+    x,
+    scenario,
+    config
+) {
   info <- scenario_info(scenario)
   stats::plogis(
     config$alpha +
@@ -39,7 +61,19 @@ transmission_probability <- function(x, scenario, config) {
   )
 }
 
-build_seirconn_model <- function(config, scenario, x) {
+#' Build a heterogeneous connected SEIR model
+#'
+#' @param config Named simulation-configuration list.
+#' @param scenario Character scenario label.
+#' @param x Numeric vector containing one feature value per agent.
+#'
+#' @return A list containing an `epiworldR` model pointer and agent metadata.
+#' @export
+build_seirconn_model <- function(
+    config,
+    scenario,
+    x
+) {
   validate_simulation_config(config)
   info <- scenario_info(scenario)
   if (length(x) != config$n_agents) {
@@ -94,4 +128,3 @@ build_seirconn_model <- function(config, scenario, x) {
     )
   )
 }
-

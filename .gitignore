@@ -18,6 +18,4 @@ artifacts/*.csv
 
 # Quarto and test caches
 reports/_freeze/
-reports/*_files/
 tests/testthat/_snaps/
-
