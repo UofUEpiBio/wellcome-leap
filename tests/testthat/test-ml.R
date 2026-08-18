@@ -14,7 +14,7 @@ testthat::test_that("run-level splitting prevents leakage", {
 })
 
 testthat::test_that("mask matrices encode all three patterns", {
-  data <- data.frame(x = c(0.2, 0.8), scenario = c("lower", "higher"))
+  data <- data.frame(x = c(-0.8, 0.8), scenario = c("lower", "higher"))
   preprocessor <- fit_preprocessor(data)
   both <- make_masked_matrix(data, "both", preprocessor)
   x_only <- make_masked_matrix(data, "x_only", preprocessor)
@@ -22,6 +22,23 @@ testthat::test_that("mask matrices encode all three patterns", {
   testthat::expect_true(all(both[, 3:4] == 1))
   testthat::expect_true(all(x_only[, 2] == 0 & x_only[, 4] == 0))
   testthat::expect_true(all(scenario_only[, 1] == 0 & scenario_only[, 3] == 0))
+})
+
+testthat::test_that("torch modality dropout retains one or both inputs", {
+  testthat::skip_if_not_installed("torch")
+  torch::torch_manual_seed(19L)
+  input <- torch::torch_tensor(
+    matrix(rep(c(0.5, 1, 1, 1), 300L), ncol = 4L, byrow = TRUE),
+    dtype = torch::torch_float()
+  )
+  dropped <- as.matrix(apply_modality_dropout(input))
+  indicators <- unique(dropped[, 3:4, drop = FALSE])
+
+  testthat::expect_true(all(rowSums(indicators) >= 1))
+  testthat::expect_true(all(apply(indicators, 1, paste, collapse = "") %in%
+    c("11", "10", "01")))
+  testthat::expect_true(all(dropped[dropped[, 3] == 0, 1] == 0))
+  testthat::expect_true(all(dropped[dropped[, 4] == 0, 2] == 0))
 })
 
 testthat::test_that("torch model trains, predicts, and serializes", {
@@ -34,7 +51,7 @@ testthat::test_that("torch model trains, predicts, and serializes", {
     KEEP.OUT.ATTRS = FALSE
   )
   runs$run_id <- sprintf("%s_%02d", runs$scenario, runs$replicate)
-  runs$x <- stats::runif(nrow(runs))
+  runs$x <- stats::rnorm(nrow(runs))
   rate <- exp(-0.5 + runs$x + 0.35 * (runs$scenario == "higher"))
   runs$secondary_cases <- stats::rpois(nrow(runs), rate)
   runs$outcome_complete <- TRUE

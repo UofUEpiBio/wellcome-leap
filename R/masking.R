@@ -101,29 +101,6 @@ make_masked_matrix <- function(
   )
 }
 
-#' Augment training observations with every supported mask
-#'
-#' @param data Agent-level training data.
-#' @param preprocessor Training-derived preprocessing metadata.
-#' @param target Name of the count target column.
-#'
-#' @return A list containing an augmented input matrix and target vector.
-#' @export
-augment_mask_patterns <- function(
-    data,
-    preprocessor,
-    target = "secondary_cases"
-) {
-  patterns <- c("both", "x_only", "scenario_only")
-  inputs <- lapply(patterns, function(pattern) {
-    make_masked_matrix(data, pattern, preprocessor)
-  })
-  list(
-    x = do.call(rbind, inputs),
-    y = rep(as.numeric(data[[target]]), times = length(patterns))
-  )
-}
-
 #' Build row-wise inputs for public inference
 #'
 #' @param x Optional numeric vector of agent features.
@@ -154,8 +131,6 @@ make_inference_matrix <- function(
   if (any(!x_observed & !scenario_observed)) {
     stop("Every prediction row must provide x, scenario, or both.")
   }
-  if (any(x[x_observed] < 0 | x[x_observed] > 1)) stop("Observed x must be in [0, 1].")
-
   encoded <- rep(0, n)
   encoded[scenario_observed] <- unname(
     preprocessor$scenario_levels[scenario[scenario_observed]]

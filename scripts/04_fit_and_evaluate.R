@@ -6,7 +6,7 @@ source("R/masking.R")
 source("R/torch_model.R")
 source("R/fit_models.R")
 
-manifest_path <- "data/derived/manifest.rds"
+manifest_path <- "data/derived/production/manifest.rds"
 if (!file.exists(manifest_path)) {
   stop("Run scripts/03_run_production.R before fitting the ML model.")
 }
@@ -22,8 +22,8 @@ fit <- fit_masked_model(
   max_epochs = 30L,
   patience   = 5L
 )
-mae <- evaluate_masked_mae(fit)
+rmse <- evaluate_masked_rmse(fit)
 save_masked_model(fit)
-saveRDS(mae, "artifacts/masked_model_mae.rds")
+saveRDS(rmse, "artifacts/masked_model_rmse.rds")
 print(fit$history)
-print(mae)
+print(rmse)

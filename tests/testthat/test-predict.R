@@ -9,7 +9,7 @@ testthat::test_that("prediction wrapper supports all observation patterns", {
     KEEP.OUT.ATTRS = FALSE
   )
   data$run_id <- sprintf("%s_%02d", data$scenario, data$replicate)
-  data$x <- stats::runif(nrow(data))
+  data$x <- stats::rnorm(nrow(data))
   data$secondary_cases <- stats::rpois(
     nrow(data),
     exp(-0.5 + data$x + 0.35 * (data$scenario == "higher"))
