@@ -101,15 +101,18 @@ run_simulation_study <- function(
 #' @param batch_size Number of replicates per saved batch.
 #' @param workers Number of parallel workers.
 #' @param output_dir Directory for ignored generated RDS files.
+#' @param reuse_existing Whether to reuse complete batches whose saved
+#'   configuration matches `config`.
 #'
 #' @return A data frame manifest of generated batch files.
 #' @export
 run_simulation_batches <- function(
     config,
-    n_reps     = 10000L,
-    batch_size = 100L,
-    workers    = 1L,
-    output_dir = "data/derived"
+    n_reps         = 10000L,
+    batch_size     = 100L,
+    workers        = 1L,
+    output_dir     = "data/derived",
+    reuse_existing = TRUE
 ) {
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
   manifest <- list()
@@ -117,25 +120,52 @@ run_simulation_batches <- function(
     starts <- seq.int(1L, n_reps, by = batch_size)
     for (start in starts) {
       ids <- start:min(start + batch_size - 1L, n_reps)
-      if (workers > 1L && .Platform$OS.type != "windows") {
-        tasks <- parallel::mclapply(ids, function(id) {
-          simulate_one(config, scenario, id, keep_transmissions = FALSE)
-        }, mc.cores = workers, mc.preschedule = TRUE)
-      } else {
-        tasks <- lapply(ids, function(id) {
-          simulate_one(config, scenario, id, keep_transmissions = FALSE)
-        })
-      }
-      batch <- list(
-        agents = do.call(rbind, lapply(tasks, `[[`, "agents")),
-        runs = do.call(rbind, lapply(tasks, `[[`, "runs")),
-        config = config
-      )
       path <- file.path(
         output_dir,
         sprintf("simulation_%s_%06d_%06d.rds", scenario, min(ids), max(ids))
       )
-      saveRDS(batch, path, compress = "xz")
+      reuse_batch <- FALSE
+      if (reuse_existing && file.exists(path)) {
+        existing <- readRDS(path)
+        expected_ids <- sprintf("%s_%06d", scenario, ids)
+        reuse_batch <- identical(existing$config, config) &&
+          identical(as.character(existing$runs$run_id), expected_ids)
+        if (!reuse_batch) {
+          stop("Existing batch does not match the requested experiment: ", path)
+        }
+      }
+      if (!reuse_batch) {
+        if (workers > 1L && .Platform$OS.type != "windows") {
+          tasks <- parallel::mclapply(
+            ids,
+            function(id) {
+              simulate_one(
+                config,
+                scenario,
+                id,
+                keep_transmissions = FALSE
+              )
+            },
+            mc.cores = workers,
+            mc.preschedule = TRUE
+          )
+        } else {
+          tasks <- lapply(ids, function(id) {
+            simulate_one(
+              config,
+              scenario,
+              id,
+              keep_transmissions = FALSE
+            )
+          })
+        }
+        batch <- list(
+          agents = do.call(rbind, lapply(tasks, `[[`, "agents")),
+          runs = do.call(rbind, lapply(tasks, `[[`, "runs")),
+          config = config
+        )
+        saveRDS(batch, path, compress = "xz")
+      }
       manifest[[length(manifest) + 1L]] <- data.frame(
         scenario = scenario,
         first_replicate = min(ids),
@@ -148,4 +178,38 @@ run_simulation_batches <- function(
   manifest <- do.call(rbind, manifest)
   saveRDS(manifest, file.path(output_dir, "manifest.rds"))
   manifest
+}
+
+#' Load a saved production simulation study
+#'
+#' @param manifest_path Path to the manifest written by
+#'   [run_simulation_batches()].
+#' @param root_dir Directory against which manifest paths are resolved when
+#'   they are not available from the current working directory.
+#'
+#' @return A list containing combined agent and run tables plus the manifest.
+#' @export
+load_simulation_batches <- function(
+    manifest_path = "data/derived/manifest.rds",
+    root_dir       = "."
+) {
+  if (!file.exists(manifest_path)) {
+    stop("Simulation manifest not found: ", manifest_path)
+  }
+  manifest <- readRDS(manifest_path)
+  paths <- as.character(manifest$path)
+  unresolved <- !file.exists(paths)
+  paths[unresolved] <- file.path(root_dir, paths[unresolved])
+  if (any(!file.exists(paths))) {
+    stop(
+      "Simulation batch files are missing: ",
+      paste(paths[!file.exists(paths)], collapse = ", ")
+    )
+  }
+  batches <- lapply(paths, readRDS)
+  list(
+    agents = do.call(rbind, lapply(batches, `[[`, "agents")),
+    runs = do.call(rbind, lapply(batches, `[[`, "runs")),
+    manifest = manifest
+  )
 }

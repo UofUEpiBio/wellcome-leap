@@ -1,11 +1,9 @@
 # AMPLIFY simulation experiment
 
 
-This report runs a reproducible inspection study for the two
-antibiotic-resistant organism scenarios. It uses 100 independent
-simulations per scenario with 1,000 agents per simulation. The
-production experiment increases this to 10,000 simulations per scenario
-using the same functions.
+This report summarizes the full production study for the two
+antibiotic-resistant organism scenarios. It uses 10,000 independent
+simulations per scenario with 1,000 agents per simulation.
 
 ## Setup and execution
 
@@ -16,24 +14,40 @@ source("../R/extract_outcomes.R")
 source("../R/simulate.R")
 
 config <- default_simulation_config()
-study <- run_simulation_study(
-  config,
-  n_reps  = 100L,
-  workers = 1L
+study <- load_simulation_batches(
+  manifest_path = "../data/derived/manifest.rds",
+  root_dir       = ".."
 )
+run_counts <- table(study$runs$scenario)
+if (!identical(as.integer(run_counts[c("lower", "higher")]), c(10000L, 10000L))) {
+  stop("The production manifest must contain 10,000 runs per scenario.")
+}
+knitr::kable(data.frame(scenario = names(run_counts), runs = as.integer(run_counts)))
 ```
 
-All reported individual outcomes have complete follow-up through the
-fixed 250-day safety horizon.
+| scenario |  runs |
+|:---------|------:|
+| higher   | 10000 |
+| lower    | 10000 |
+
+The fixed 250-day safety horizon completed every higher-scenario run and
+9,947 of 10,000 lower-scenario runs. Individual reproduction-number
+summaries exclude the 53 censored lower-scenario runs because some
+infectious agents remained active at the horizon. Infected agents with
+complete follow-up and zero secondary infections remain in the analysis.
 
 ``` r
 with(study$runs, table(scenario, outcome_complete))
 ```
 
             outcome_complete
-    scenario TRUE
-      higher  100
-      lower   100
+    scenario FALSE  TRUE
+      higher     0 10000
+      lower     53  9947
+
+``` r
+analysis_agents <- study$agents[study$agents$outcome_complete, ]
+```
 
 ## Individual reproduction-number distribution
 
@@ -66,7 +80,7 @@ summarize_ri <- function(data) {
 
 ri_summary <- do.call(
   rbind,
-  lapply(split(study$agents, study$agents$scenario), summarize_ri)
+  lapply(split(analysis_agents, analysis_agents$scenario), summarize_ri)
 )
 ri_summary$scenario <- rownames(ri_summary)
 rownames(ri_summary) <- NULL
@@ -76,13 +90,13 @@ knitr::kable(ri_summary, digits = 3)
 
 | scenario | infected_agents | mean_ri | sd_ri | p05 | p25 | median | p75 | p95 | zero_fraction |
 |:---------|----------------:|--------:|------:|----:|----:|-------:|----:|----:|--------------:|
-| higher   |           78623 |   0.987 | 1.421 |   0 |   0 |      1 |   1 |   4 |         0.499 |
-| lower    |           55332 |   0.982 | 1.381 |   0 |   0 |      1 |   1 |   4 |         0.491 |
+| higher   |         8484268 |   0.988 | 1.437 |   0 |   0 |      1 |   1 |   4 |         0.500 |
+| lower    |         6294271 |   0.984 | 1.386 |   0 |   0 |      1 |   1 |   4 |         0.491 |
 
 ``` r
 boxplot(
   secondary_cases ~ scenario,
-  data = study$agents,
+  data = analysis_agents,
   outline = FALSE,
   xlab = "Scenario",
   ylab = "Individual secondary infections (Ri)",
@@ -97,9 +111,9 @@ The next plot retains the large mass at zero and groups the upper tail
 for readability.
 
 ``` r
-ri_group <- pmin(study$agents$secondary_cases, 7L)
+ri_group <- pmin(analysis_agents$secondary_cases, 7L)
 distribution <- prop.table(
-  table(study$agents$scenario, factor(ri_group, levels = 0:7)),
+  table(analysis_agents$scenario, factor(ri_group, levels = 0:7)),
   margin = 1
 )
 barplot(
@@ -125,7 +139,7 @@ remains susceptible. The table reports both the pooled early-agent mean
 and the distribution of run-level early means.
 
 ``` r
-early_agents <- study$agents[study$agents$early_phase, ]
+early_agents <- analysis_agents[analysis_agents$early_phase, ]
 pooled_early <- do.call(rbind, lapply(split(early_agents, early_agents$scenario), function(x) {
   data.frame(
     scenario = x$scenario[[1]],
@@ -149,18 +163,18 @@ knitr::kable(pooled_early, digits = 3)
 
 | scenario | mean_ri |    se | infected_agents |
 |:---------|--------:|------:|----------------:|
-| higher   |   1.761 | 0.021 |            9497 |
-| lower    |   1.390 | 0.018 |            9266 |
+| higher   |   1.937 | 0.002 |          945448 |
+| lower    |   1.450 | 0.002 |          957979 |
 
 ``` r
 knitr::kable(run_early, digits = 3)
 ```
 
-| scenario | mean_run_ri | sd_run_ri | runs |
-|:---------|------------:|----------:|-----:|
-| higher   |       1.748 |     0.254 |  100 |
-| lower    |       1.354 |     0.262 |  100 |
+| scenario | mean_run_ri | sd_run_ri |  runs |
+|:---------|------------:|----------:|------:|
+| higher   |       1.938 |     0.196 | 10000 |
+| lower    |       1.444 |     0.184 | 10000 |
 
-These values are expected to vary around the targets because this is a
-finite stochastic model. The calibration script refines the scenario
-intercepts with larger Monte Carlo batches before the production run.
+These values vary around the targets because this is a finite stochastic
+model. The calibration script refines the scenario intercepts before the
+production run.

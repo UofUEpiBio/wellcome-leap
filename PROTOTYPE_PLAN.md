@@ -201,7 +201,7 @@ Calibration will occur before the 10,000-run production stage.
 
 ### Phase E: Quarto simulation report
 
-- Run a reproducible inspection experiment from `reports/simulation_experiment.qmd` rather than an ad hoc analysis script.
+- Summarize the complete 10,000-replicate-per-scenario production experiment from `reports/simulation_experiment.qmd` rather than running a separate ad hoc inspection sample.
 - Render with `format: gfm` and commit the resulting Markdown and figure assets, but not the underlying simulated agent data.
 - Report the number of infected agents, mean, standard deviation, median, interquartile range, selected quantiles, and zero-secondary-infection fraction by scenario.
 - Plot the overall distribution of individual \(R_i\) values by scenario and summarize achieved early-epidemic reproduction numbers.
@@ -344,9 +344,9 @@ The scientific design decisions in Gate 1 have been resolved. Implementation can
 - Apply masking only after splitting.
 - Report complete-data and each incomplete-data pattern separately.
 
-## 11. Remaining operational question
+## 11. Compute environment
 
-What compute environment will run the 20,000 production simulations (local workstation, cluster, or cloud), and is there a preferred parallelization system? This does not block construction of the smoke test or calibration pilot.
+The prototype production experiment runs locally using up to eight CPU workers. Simulation outputs are saved in restartable 500-replicate batches, and the native R `torch` fitting stage uses up to eight LibTorch threads.
 
 ## 12. Approved working design
 
