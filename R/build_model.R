@@ -6,8 +6,8 @@
 validate_simulation_config <- function(config) {
   required <- c(
     "n_agents", "prevalence", "contact_rate", "incubation_days",
-    "recovery_rate", "beta_x", "alpha", "delta_scenario", "max_days",
-    "early_susceptible_fraction", "base_seed"
+    "recovery_rate", "x_mean", "x_sd", "beta_x", "alpha",
+    "delta_scenario", "max_days", "early_susceptible_fraction", "base_seed"
   )
   missing <- setdiff(required, names(config))
   if (length(missing)) {
@@ -16,6 +16,9 @@ validate_simulation_config <- function(config) {
   if (config$n_agents < 2L) stop("n_agents must be at least 2.")
   if (config$prevalence <= 0 || config$prevalence >= 1) {
     stop("prevalence must be strictly between 0 and 1.")
+  }
+  if (!is.finite(config$x_mean) || !is.finite(config$x_sd) || config$x_sd <= 0) {
+    stop("x_mean must be finite and x_sd must be positive.")
   }
   probability_fields <- c("recovery_rate", "early_susceptible_fraction")
   for (field in probability_fields) {
@@ -42,7 +45,7 @@ scenario_info <- function(scenario) {
 
 #' Calculate agent-specific transmission probabilities
 #'
-#' @param x Numeric vector of agent features in `[0, 1]`.
+#' @param x Numeric vector of finite agent features.
 #' @param scenario Character scenario label.
 #' @param config Named simulation-configuration list.
 #'
@@ -79,8 +82,8 @@ build_seirconn_model <- function(
   if (length(x) != config$n_agents) {
     stop("x must contain one value per agent.")
   }
-  if (any(!is.finite(x)) || any(x < 0 | x > 1)) {
-    stop("x must contain finite values in [0, 1].")
+  if (any(!is.finite(x))) {
+    stop("x must contain only finite values.")
   }
   if (!requireNamespace("epiworldR", quietly = TRUE)) {
     stop("The epiworldR package is required. Run scripts/00_install_dependencies.R.")

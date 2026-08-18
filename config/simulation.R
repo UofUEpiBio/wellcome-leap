@@ -5,16 +5,18 @@
 #' @export
 default_simulation_config <- function() {
   list(
-    n_agents = 1000L,
+    n_agents = 5000L,
     prevalence = 0.01,
     contact_rate = 2,
     incubation_days = 3,
     recovery_rate = 0.20,
+    x_mean = 0,
+    x_sd = 1,
     beta_x = 1,
-    alpha = -2.263589,
-    delta_scenario = 0.352420,
+    alpha = -2.047796,
+    delta_scenario = 0.398080,
     target_r0 = c(lower = 1.5, higher = 2.0),
-    max_days = 250L,
+    max_days = 60L,
     early_susceptible_fraction = 0.90,
     base_seed = 20260818L
   )
