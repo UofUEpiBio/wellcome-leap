@@ -38,7 +38,7 @@ with(study$runs, table(scenario, outcome_complete))
 ## Individual reproduction-number distribution
 
 The target is each infected agent’s realized number of secondary
-infections, (R_i), including zero.
+infections, `R_i`, including zero.
 
 ``` r
 #' Summarize an individual reproduction-number sample
