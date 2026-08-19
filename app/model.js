@@ -96,19 +96,9 @@ const AmplifyModel = (function () {
     });
   }
 
-  /** Look up the reported test RMSE for one observation pattern. */
-  function testRmse(model, pattern, scenario) {
-    if (!model.evaluation) return null;
-    const match = model.evaluation.find(function (row) {
-      return row.pattern === pattern && row.scenario === (scenario || "overall");
-    });
-    return match ? match.rmse : null;
-  }
-
   return {
     PATTERNS: PATTERNS,
     predict: predict,
-    predictCurve: predictCurve,
-    testRmse: testRmse
+    predictCurve: predictCurve
   };
 })();

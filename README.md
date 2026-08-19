@@ -463,6 +463,17 @@ organism scenario — requires at least one of them, and flags the returned
 individual reproduction number as outbreak potential, borderline, or
 self-limiting.
 
+The page relabels those two attributes for a clinical audience. The agent
+feature is presented as a transmissibility index assembled from
+colonisation density, antibiotic exposure, resistance determinants,
+indwelling devices, and care setting, and the two organism scenarios are
+presented as an ESBL-producing *E. coli* and a carbapenem-resistant *K.
+pneumoniae*. That relabelling lives in `app/site.json` and is presentation
+only — the fitted weights, and everything downstream of the index, are
+untouched — and the application tabulates the whole mapping on its "How it
+works" tab so the illustrative contributions are visible rather than
+implied.
+
 The application is published to GitHub Pages by
 [.github/workflows/pages.yml](.github/workflows/pages.yml) on every push
 to `main` that touches `app/`.
@@ -491,8 +502,9 @@ predictions before writing. Re-run it whenever the surrogate is
 retrained.
 
 Presentation text — the app name, tagline, attribution, partner
-institutions, flag thresholds, and scenario labels — lives in
-`app/site.json` and can be edited without touching any code.
+institutions, flag thresholds, organism labels, and the carrier-profile
+mapping — lives in `app/site.json` and can be edited without touching any
+code.
 
 ## Repository documents
 

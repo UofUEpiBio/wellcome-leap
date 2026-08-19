@@ -1,5 +1,5 @@
 {
-  "_comment": "Editable presentation settings for the prototype app. Nothing here affects the model; edit freely and redeploy.",
+  "_comment": "Editable presentation settings for the prototype app. Nothing here affects the fitted model: the profile block only describes how the page maps familiar clinical, microbiological, and omics inputs onto the single standardized feature the surrogate was trained on. Edit freely and redeploy.",
   "programme": "Wellcome Leap",
   "consortium": "AMPLIFY",
   "app_name": "Individual Transmission Risk Explorer",
@@ -19,16 +19,97 @@
     "outbreak": 1.1,
     "self_limiting": 0.9
   },
+  "profile": {
+    "label": "Carrier profile",
+    "note": "Colonisation, exposure, and contact measurements for the individual. Together they set a single standardized transmissibility index, which is the quantity the fitted surrogate consumes.",
+    "index_label": "Transmissibility index",
+    "index_note": "Index = 0 is an average carrier. It is capped at ±3, the range the training data covers.",
+    "driver": {
+      "label": "Colonisation density",
+      "unit": "log₁₀ CFU/g stool",
+      "modality": "Microbiology",
+      "min": 3,
+      "max": 10,
+      "step": 0.1,
+      "value": 6.5,
+      "center": 6.5,
+      "weight": 0.5,
+      "hints": [
+        "3 · near the limit of detection",
+        "6.5 · typical carriage",
+        "10 · dense carriage"
+      ]
+    },
+    "modifiers": [
+      {
+        "id": "antibiotics",
+        "label": "Antibiotic exposure in the last 30 days",
+        "modality": "Clinical",
+        "value": 1,
+        "options": [
+          { "label": "None", "offset": -0.45 },
+          { "label": "One narrow-spectrum course", "offset": 0 },
+          { "label": "One broad-spectrum course", "offset": 0.5 },
+          { "label": "Repeated broad-spectrum courses", "offset": 0.95 }
+        ]
+      },
+      {
+        "id": "mobile_elements",
+        "label": "Resistance determinants on the isolate",
+        "modality": "Omics",
+        "value": 1,
+        "options": [
+          { "label": "Chromosomal only, no mobile element", "offset": -0.3 },
+          { "label": "Resistance gene on a conjugative plasmid", "offset": 0 },
+          { "label": "Multi-replicon plasmid, several determinants", "offset": 0.45 }
+        ]
+      },
+      {
+        "id": "shedding",
+        "label": "Diarrhoea or faecal incontinence",
+        "modality": "Clinical",
+        "value": 0,
+        "options": [
+          { "label": "No", "offset": 0 },
+          { "label": "Yes", "offset": 0.55 }
+        ]
+      },
+      {
+        "id": "devices",
+        "label": "Indwelling devices or open wounds",
+        "modality": "Clinical",
+        "value": 0,
+        "options": [
+          { "label": "None", "offset": 0 },
+          { "label": "One device", "offset": 0.3 },
+          { "label": "Several devices, or an open wound", "offset": 0.55 }
+        ]
+      },
+      {
+        "id": "setting",
+        "label": "Care setting and contact intensity",
+        "modality": "Sociodemographic",
+        "value": 1,
+        "options": [
+          { "label": "Community household", "offset": -0.35 },
+          { "label": "General ward", "offset": 0 },
+          { "label": "Intensive or high-dependency care", "offset": 0.45 }
+        ]
+      }
+    ]
+  },
+  "organism_label": "Organism identified",
+  "organism_note": "Which of the two calibrated antibiotic-resistant organisms the individual is carrying.",
   "scenarios": [
     {
       "id": "lower",
-      "label": "Lower-transmission organism",
-      "note": "Calibrated to a population R0 near 1.5."
+      "label": "ESBL-producing E. coli",
+      "note": "Stands in for the lower-transmission organism, calibrated to a population R₀ near 1.5."
     },
     {
       "id": "higher",
-      "label": "Higher-transmission organism",
-      "note": "Calibrated to a population R0 near 3.0."
+      "label": "Carbapenem-resistant K. pneumoniae",
+      "note": "Stands in for the higher-transmission organism, calibrated to a population R₀ near 3.0."
     }
   ]
 }

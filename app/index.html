@@ -15,221 +15,243 @@
     <p class="eyebrow"><span data-site="programme">Wellcome Leap</span> · <span data-site="consortium">AMPLIFY</span></p>
     <h1 data-site="app_name">Individual Transmission Risk Explorer</h1>
     <p class="lede" data-site="tagline"></p>
-    <p class="badge-row">
-      <span class="badge badge-accent">Functional prototype</span>
-      <span class="badge">Runs entirely in your browser</span>
-      <span class="badge">No data leaves this page</span>
-    </p>
   </header>
 
-  <section class="card intro">
-    <h2>What this tool is</h2>
-    <p>
-      This page was created by our team for the <strong data-site="programme">Wellcome Leap</strong>
-      <strong data-site="consortium">AMPLIFY</strong> proposal. It is a <strong>functional prototype</strong>:
-      every number it shows is produced by a model we actually fitted, not by a mock-up. It exists to
-      demonstrate, end to end, the three pieces the full project brings together.
-    </p>
-    <ol class="pieces">
-      <li>
-        <span class="piece-index">1</span>
-        <div>
-          <h3>The mechanistic model</h3>
-          <p>
-            A stochastic agent-based SEIR simulation of two antibiotic-resistant organisms. Each simulated
-            individual carries a feature that shifts their per-contact transmission probability, so the
-            simulation produces a <em>realized</em> number of secondary infections for every infected agent.
-          </p>
-        </div>
-      </li>
-      <li>
-        <span class="piece-index">2</span>
-        <div>
-          <h3>The machine-learning component</h3>
-          <p>
-            A count-regression neural network trained on those simulated individuals, using
-            <strong>multimodal input with deliberate information loss</strong>: during training, each row
-            randomly keeps both inputs, the individual feature alone, or the organism scenario alone. The
-            model therefore stays usable when a modality is missing, instead of failing or silently
-            imputing it. The two organisms are weighted equally during training, so an estimate made from
-            one modality genuinely averages over the other.
-          </p>
-        </div>
-      </li>
-      <li>
-        <span class="piece-index">3</span>
-        <div>
-          <h3>The application</h3>
-          <p>
-            This interface. It carries the fitted weights directly and evaluates them locally, which is how
-            the delivered tool is intended to feel: a practitioner supplies whatever they have, and gets an
-            interpretable estimate back immediately.
-          </p>
-        </div>
-      </li>
-    </ol>
-  </section>
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button type="button" role="tab" id="tab-estimator" data-tab="estimator"
+      aria-controls="panel-estimator" aria-selected="true">Estimator</button>
+    <button type="button" role="tab" id="tab-method" data-tab="method"
+      aria-controls="panel-method" aria-selected="false">How it works</button>
+  </nav>
 
-  <section class="card estimator" id="estimator">
-    <div class="estimator-head">
-      <h2>Estimate an individual reproduction number</h2>
-      <p class="muted">
-        Provide <strong>at least one</strong> of the two attributes. The model handles either one alone, or
-        both together — that is the point of it.
+  <!-- ------------------------------------------------------------------ -->
+  <section class="panel" id="panel-estimator" role="tabpanel" aria-labelledby="tab-estimator">
+
+    <section class="card estimator" id="estimator">
+      <div class="estimator-head">
+        <h2>Estimate an individual reproduction number</h2>
+        <p class="muted">
+          Provide the <strong>carrier profile</strong>, the <strong>organism</strong>, or both. The model
+          handles either one alone — that is the point of it.
+        </p>
+      </div>
+
+      <div class="estimator-grid">
+        <form class="controls" id="controls" autocomplete="off">
+
+          <fieldset class="control" id="control-profile">
+            <div class="control-head">
+              <div>
+                <legend id="profile-legend">Carrier profile</legend>
+                <p class="control-note" id="profile-note"></p>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="use-profile" checked>
+                <span class="switch-track" aria-hidden="true"></span>
+                <span class="switch-label">Provide</span>
+              </label>
+            </div>
+            <div class="control-body" id="body-profile">
+              <div class="field" id="driver-field">
+                <div class="field-head">
+                  <label class="field-label" for="driver-slider" id="driver-label"></label>
+                  <span class="chip" id="driver-modality"></span>
+                </div>
+                <div class="slider-row">
+                  <input type="range" id="driver-slider">
+                  <output class="readout" id="driver-readout"></output>
+                </div>
+                <div class="scale-hint" id="driver-hints"></div>
+              </div>
+
+              <div class="modifiers" id="modifiers"></div>
+
+              <div class="index-row">
+                <span class="index-label" id="index-label">Transmissibility index</span>
+                <span class="index-value" id="index-value">0.00</span>
+              </div>
+              <p class="index-note" id="index-note"></p>
+            </div>
+          </fieldset>
+
+          <fieldset class="control" id="control-scenario">
+            <div class="control-head">
+              <div>
+                <legend id="organism-legend">Organism identified</legend>
+                <p class="control-note" id="organism-note"></p>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="use-scenario" checked>
+                <span class="switch-track" aria-hidden="true"></span>
+                <span class="switch-label">Provide</span>
+              </label>
+            </div>
+            <div class="control-body" id="body-scenario">
+              <div class="segmented" id="scenario-choice" role="radiogroup" aria-label="Organism identified"></div>
+              <p class="scenario-note" id="scenario-note"></p>
+            </div>
+          </fieldset>
+
+          <p class="form-error" id="form-error" role="alert" hidden>
+            Turn on the carrier profile, the organism, or both — the model needs something to work from.
+          </p>
+        </form>
+
+        <div class="result" id="result" aria-live="polite">
+          <p class="result-label">Estimated individual reproduction number</p>
+          <p class="result-value" id="result-value">—</p>
+          <p class="result-flag" id="result-flag">Waiting for input</p>
+          <p class="result-meaning" id="result-meaning"></p>
+          <dl class="result-meta">
+            <div>
+              <dt>Inputs used</dt>
+              <dd id="meta-pattern">—</dd>
+            </div>
+            <div>
+              <dt>Transmissibility index</dt>
+              <dd id="meta-index">—</dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+
+      <figure class="chart-wrap">
+        <figcaption id="chart-caption"></figcaption>
+        <div class="chart" id="chart"></div>
+      </figure>
+
+      <p class="reading-note">
+        <strong>How to read the flag.</strong> The estimate is an expected count of secondary infections from
+        this one individual. Above <span data-threshold="outbreak">1.1</span> we flag
+        <strong>outbreak potential</strong>: this individual is expected to more than replace themselves.
+        Below <span data-threshold="self_limiting">0.9</span> we flag <strong>self-limiting</strong>.
+        In between we flag <strong>borderline</strong> rather than pretending the model can separate the two —
+        realized secondary infections are far more variable than the width of that band, so a near-one
+        estimate is a question, not an answer.
       </p>
-    </div>
+    </section>
 
-    <div class="estimator-grid">
-      <form class="controls" id="controls" autocomplete="off">
+    <section class="card intro">
+      <h2>What this tool is</h2>
+      <p>
+        This page was created by our team for the <strong data-site="programme">Wellcome Leap</strong>
+        <strong data-site="consortium">AMPLIFY</strong> proposal. It is a <strong>functional prototype</strong>:
+        every number it shows comes from a model we actually fitted, evaluated in your browser, not from a
+        mock-up. A user supplies whatever they have — colonisation and exposure measurements, an organism
+        identification, or only one of the two — and gets an interpretable estimate back immediately.
+      </p>
+      <p>
+        The inputs are labelled with the clinical, microbiological, and omics quantities the delivered tool is
+        designed around. Underneath, the prototype's simulation supplies a single standardized
+        transmissibility feature, so the page maps the profile items onto that one feature with the
+        illustrative weights shown under <a href="#method" data-tab-link="method">How it works</a>. The
+        machinery — including the ability to estimate with a whole modality missing — is real; the numerical
+        weight of any individual clinical item is not yet.
+      </p>
+    </section>
 
-        <fieldset class="control" id="control-x">
-          <div class="control-head">
-            <div>
-              <legend>Attribute 1 — Individual feature</legend>
-              <p class="control-note">
-                A standardized per-individual transmissibility characteristic. In the prototype this is a
-                single simulated value; in the full tool it is what clinical, sociodemographic, and omics
-                measurements would feed.
-              </p>
-            </div>
-            <label class="switch">
-              <input type="checkbox" id="use-x" checked>
-              <span class="switch-track" aria-hidden="true"></span>
-              <span class="switch-label">Provide</span>
-            </label>
-          </div>
-          <div class="control-body" id="body-x">
-            <div class="slider-row">
-              <input type="range" id="x-slider" min="-3" max="3" step="0.05" value="0">
-              <output class="readout" id="x-readout">0.00</output>
-            </div>
-            <div class="scale-hint">
-              <span>−3 · well below average</span>
-              <span>0 · average</span>
-              <span>+3 · well above average</span>
-            </div>
-          </div>
-        </fieldset>
+  </section>
 
-        <fieldset class="control" id="control-scenario">
-          <div class="control-head">
-            <div>
-              <legend>Attribute 2 — Organism scenario</legend>
-              <p class="control-note">
-                Which of the two calibrated antibiotic-resistant organisms the individual is carrying.
-              </p>
-            </div>
-            <label class="switch">
-              <input type="checkbox" id="use-scenario" checked>
-              <span class="switch-track" aria-hidden="true"></span>
-              <span class="switch-label">Provide</span>
-            </label>
-          </div>
-          <div class="control-body" id="body-scenario">
-            <div class="segmented" id="scenario-choice" role="radiogroup" aria-label="Organism scenario"></div>
-            <p class="scenario-note" id="scenario-note"></p>
-          </div>
-        </fieldset>
+  <!-- ------------------------------------------------------------------ -->
+  <section class="panel" id="panel-method" role="tabpanel" aria-labelledby="tab-method" hidden>
 
-        <p class="form-error" id="form-error" role="alert" hidden>
-          Turn on at least one attribute — the model needs something to work from.
-        </p>
-      </form>
-
-      <div class="result" id="result" aria-live="polite">
-        <p class="result-label">Estimated individual reproduction number</p>
-        <p class="result-value" id="result-value">—</p>
-        <p class="result-flag" id="result-flag">Waiting for input</p>
-        <p class="result-meaning" id="result-meaning"></p>
-        <dl class="result-meta">
+    <section class="card">
+      <h2>The three pieces this prototype joins</h2>
+      <ol class="pieces">
+        <li>
+          <span class="piece-index">1</span>
           <div>
-            <dt>Inputs used</dt>
-            <dd id="meta-pattern">—</dd>
+            <h3>The mechanistic model</h3>
+            <p>
+              A stochastic agent-based SEIR simulation of two antibiotic-resistant organisms. Each simulated
+              individual carries a feature that shifts their per-contact transmission probability, so the
+              simulation produces a <em>realized</em> number of secondary infections for every infected agent.
+            </p>
           </div>
+        </li>
+        <li>
+          <span class="piece-index">2</span>
           <div>
-            <dt>Test RMSE for this input pattern</dt>
-            <dd id="meta-rmse">—</dd>
+            <h3>The machine-learning component</h3>
+            <p>
+              A count-regression neural network trained on those simulated individuals, using
+              <strong>multimodal input with deliberate information loss</strong>: during training, each row
+              randomly keeps both inputs, the individual feature alone, or the organism alone. The model
+              therefore stays usable when a modality is missing, instead of failing or silently imputing it.
+              The two organisms are weighted equally during training, so an estimate made from one modality
+              genuinely averages over the other.
+            </p>
           </div>
-        </dl>
+        </li>
+        <li>
+          <span class="piece-index">3</span>
+          <div>
+            <h3>The application</h3>
+            <p>
+              The estimator on the first tab. It carries the fitted weights directly and evaluates them
+              locally, which is how the delivered tool is intended to feel: a practitioner supplies whatever
+              they have, and gets an interpretable estimate back immediately.
+            </p>
+          </div>
+        </li>
+      </ol>
+      <p class="badge-row">
+        <span class="badge badge-accent">Functional prototype</span>
+        <span class="badge">Runs entirely in your browser</span>
+        <span class="badge">No data leaves this page</span>
+      </p>
+    </section>
+
+    <section class="card">
+      <h2>How the inputs map onto the model</h2>
+      <p>
+        The fitted surrogate takes exactly two things: one standardized individual feature and the organism
+        label. The simulation behind it generates that feature directly, so it has no clinical units of its
+        own. To keep the estimator recognisable, this page presents it as a <strong>transmissibility
+        index</strong> assembled from familiar carriage, exposure, and contact measurements:
+      </p>
+      <div class="table-wrap">
+        <table class="mapping" id="mapping-table">
+          <thead>
+            <tr><th>Input</th><th>Modality</th><th>Contribution to the index</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
       </div>
-    </div>
+      <p>
+        The contributions are <strong>illustrative</strong>: they encode the direction and rough ordering that
+        the AMR literature supports, not weights estimated from patient data. They live in
+        <code>app/site.json</code> and can be edited without touching any code. The index is capped at ±3, the
+        range the training data covers. Everything downstream of the index — the network, the missing-modality
+        behaviour, the estimate — is the fitted model.
+      </p>
+      <p>
+        The organism choice is a relabelling of the same kind. The simulation calibrates a lower- and a
+        higher-transmission organism, near population reproduction numbers of 1.5 and 3.0; the page presents
+        them as an ESBL-producing <em>E. coli</em> and a carbapenem-resistant <em>K. pneumoniae</em> so the
+        contrast is concrete. The estimates are not organism-specific evidence about either species.
+      </p>
+      <p class="provenance">Weights exported from the fitted model on <span id="model-date">—</span>.</p>
+    </section>
 
-    <figure class="chart-wrap">
-      <figcaption id="chart-caption">Predicted individual reproduction number across the feature range.</figcaption>
-      <div class="chart" id="chart"></div>
-    </figure>
+    <section class="card">
+      <h2>What the full version will accept</h2>
+      <p>
+        The prototype exposes two modalities because the simulation that trained it has two. The production
+        tool is designed around the same missing-modality machinery, applied to real inputs: users will be able
+        to upload or connect <strong>clinical</strong> data (cultures, treatment and antibiotic exposure,
+        comorbidities, admissions), <strong>sociodemographic</strong> data (household structure, occupation,
+        contact patterns, sanitation and environmental context), and <strong>omics</strong> data (isolate
+        genomes, plasmid and resistance-gene content, microbiome composition) — and, in principle, further
+        modalities such as environmental surveillance or facility movement records.
+      </p>
+      <p>
+        Crucially, <strong>none of these is required</strong>. The training strategy demonstrated here — randomly
+        withholding modalities so the network learns to condition on what is actually present — is what lets a
+        user estimate with whatever they happen to have, rather than being locked out for lacking a data type.
+      </p>
+    </section>
 
-    <p class="reading-note">
-      <strong>How to read the flag.</strong> The estimate is an expected count of secondary infections from
-      this one individual. Above <span data-threshold="outbreak">1.1</span> we flag
-      <strong>outbreak potential</strong>: this individual is expected to more than replace themselves.
-      Below <span data-threshold="self_limiting">0.9</span> we flag <strong>self-limiting</strong>.
-      In between we flag <strong>borderline</strong> rather than pretending the model can separate the two —
-      the prototype's test error is several times the width of that band, so a near-one estimate is a
-      question, not an answer.
-    </p>
-  </section>
-
-  <section class="card">
-    <h2>What the full version will accept</h2>
-    <p>
-      The prototype exposes two attributes because the simulation that trained it has two. The production
-      tool is designed around the same missing-modality machinery, applied to real inputs: users will be able
-      to upload or connect <strong>clinical</strong> data (cultures, treatment and antibiotic exposure,
-      comorbidities, admissions), <strong>sociodemographic</strong> data (household structure, occupation,
-      contact patterns, sanitation and environmental context), and <strong>omics</strong> data (isolate
-      genomes, plasmid and resistance-gene content, microbiome composition) — and, in principle, further
-      modalities such as environmental surveillance or facility movement records.
-    </p>
-    <p>
-      Crucially, <strong>none of these is required</strong>. The training strategy demonstrated here — randomly
-      withholding modalities so the network learns to condition on what is actually present — is what lets a
-      user estimate with whatever they happen to have, rather than being locked out for lacking a data type.
-    </p>
-  </section>
-
-  <section class="card">
-    <h2>What we plan to release</h2>
-    <div class="release-grid">
-      <div class="release">
-        <h3>A library</h3>
-        <p>
-          The simulation, training, and prediction pipeline as an installable package, so that other groups
-          can retrain on their own populations, script batch estimates, and audit every step.
-        </p>
-      </div>
-      <div class="release">
-        <h3>A graphical interface</h3>
-        <p>
-          A tool in the spirit of this page, for users who need an estimate rather than an API — with data
-          upload, cohort-level views, and exportable results.
-        </p>
-      </div>
-    </div>
-    <p class="release-foot">Both will be released as <strong>open source software</strong>.</p>
-  </section>
-
-  <section class="card caveats">
-    <h2>Honest limitations</h2>
-    <ul>
-      <li>
-        The training data are <em>simulated</em>. This prototype demonstrates that the machinery works; it
-        does not yet say anything about real organisms or real patients.
-      </li>
-      <li>
-        The two organisms still contribute unequally to the training data, because the
-        higher-transmission one infects more agents. Training weights each scenario equally to compensate,
-        which is what lets an estimate from the individual feature alone sit between the two organisms
-        rather than collapsing onto the more common one — at the cost of some accuracy on that organism.
-      </li>
-      <li>
-        The estimate is an expected count. Realized secondary infections are highly dispersed, so a single
-        individual's outcome will often differ substantially from their expectation.
-      </li>
-      <li id="caveat-provenance">
-        Weights were exported from the fitted model on <span id="model-date">—</span>.
-      </li>
-    </ul>
   </section>
 
   <footer class="footer">
