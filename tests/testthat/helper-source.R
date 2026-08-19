@@ -7,6 +7,7 @@ source(file.path("..", "..", "R", "masking.R"))
 if (requireNamespace("torch", quietly = TRUE)) {
   source(file.path("..", "..", "R", "torch_model.R"))
   source(file.path("..", "..", "R", "fit_models.R"))
+  source(file.path("..", "..", "R", "export_web_model.R"))
   predict_path <- file.path("..", "..", "R", "predict.R")
   if (file.exists(predict_path)) source(predict_path)
 }

@@ -5,7 +5,7 @@
 
    `Co-authored-by: OpenAI Codex <codex@openai.com>`
 
-3. Never commit generated simulation data, fitted model weights, or caches. Commit scripts, configuration, tests, documentation, deliberately small fixtures, and requested rendered GFM reports/figures only.
+3. Never commit generated simulation data, fitted model weights, or caches. Commit scripts, configuration, tests, documentation, deliberately small fixtures, and requested rendered GFM reports/figures only. The single approved exception is `app/model.json`, the small weight export the published prototype application needs to run; regenerate it with `scripts/05_export_web_model.R` rather than editing it, and keep the `.pt` weights it derives from untracked.
 4. Keep the prototype runnable in phases: simulation first, ML training second, and prediction/reporting third.
 5. Use native R `torch` for the ML surrogate. Do not introduce Python or `reticulate` unless the project owner explicitly requests it.
 6. Before committing, run the relevant tests and confirm the commit message contains the required co-author trailer.

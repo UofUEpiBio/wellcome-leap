@@ -1,0 +1,34 @@
+{
+  "_comment": "Editable presentation settings for the prototype app. Nothing here affects the model; edit freely and redeploy.",
+  "programme": "Wellcome Leap",
+  "consortium": "AMPLIFY",
+  "app_name": "Individual Transmission Risk Explorer",
+  "tagline": "A functional prototype linking a mechanistic transmission model to a missing-data-aware machine-learning surrogate.",
+  "lead_institution": "University of Utah",
+  "partner_institutions": [
+    "University of Utah",
+    "Geneva University",
+    "Johns Hopkins University",
+    "Universidad Peruana Cayetano Heredia",
+    "Monash University"
+  ],
+  "attribution": "Created by our team for the Wellcome Leap AMPLIFY proposal.",
+  "repository_url": "https://github.com/UofUEpiBio/wellcome-leap",
+  "license": "Open source release planned; see the repository for current terms.",
+  "thresholds": {
+    "outbreak": 1.1,
+    "self_limiting": 0.9
+  },
+  "scenarios": [
+    {
+      "id": "lower",
+      "label": "Lower-transmission organism",
+      "note": "Calibrated to a population R0 near 1.5."
+    },
+    {
+      "id": "higher",
+      "label": "Higher-transmission organism",
+      "note": "Calibrated to a population R0 near 3.0."
+    }
+  ]
+}

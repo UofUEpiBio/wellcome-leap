@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AMPLIFY — Individual Transmission Risk Explorer</title>
+<meta name="description" content="Functional prototype estimating an individual reproduction number from partially observed inputs, built for the Wellcome Leap AMPLIFY proposal.">
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧫</text></svg>">
+</head>
+<body>
+<div class="page">
+
+  <header class="masthead">
+    <p class="eyebrow"><span data-site="programme">Wellcome Leap</span> · <span data-site="consortium">AMPLIFY</span></p>
+    <h1 data-site="app_name">Individual Transmission Risk Explorer</h1>
+    <p class="lede" data-site="tagline"></p>
+    <p class="badge-row">
+      <span class="badge badge-accent">Functional prototype</span>
+      <span class="badge">Runs entirely in your browser</span>
+      <span class="badge">No data leaves this page</span>
+    </p>
+  </header>
+
+  <section class="card intro">
+    <h2>What this tool is</h2>
+    <p>
+      This page was created by our team for the <strong data-site="programme">Wellcome Leap</strong>
+      <strong data-site="consortium">AMPLIFY</strong> proposal. It is a <strong>functional prototype</strong>:
+      every number it shows is produced by a model we actually fitted, not by a mock-up. It exists to
+      demonstrate, end to end, the three pieces the full project brings together.
+    </p>
+    <ol class="pieces">
+      <li>
+        <span class="piece-index">1</span>
+        <div>
+          <h3>The mechanistic model</h3>
+          <p>
+            A stochastic agent-based SEIR simulation of two antibiotic-resistant organisms. Each simulated
+            individual carries a feature that shifts their per-contact transmission probability, so the
+            simulation produces a <em>realized</em> number of secondary infections for every infected agent.
+          </p>
+        </div>
+      </li>
+      <li>
+        <span class="piece-index">2</span>
+        <div>
+          <h3>The machine-learning component</h3>
+          <p>
+            A count-regression neural network trained on those simulated individuals, using
+            <strong>multimodal input with deliberate information loss</strong>: during training, each row
+            randomly keeps both inputs, the individual feature alone, or the organism scenario alone. The
+            model therefore stays usable when a modality is missing, instead of failing or silently
+            imputing it. The two organisms are weighted equally during training, so an estimate made from
+            one modality genuinely averages over the other.
+          </p>
+        </div>
+      </li>
+      <li>
+        <span class="piece-index">3</span>
+        <div>
+          <h3>The application</h3>
+          <p>
+            This interface. It carries the fitted weights directly and evaluates them locally, which is how
+            the delivered tool is intended to feel: a practitioner supplies whatever they have, and gets an
+            interpretable estimate back immediately.
+          </p>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <section class="card estimator" id="estimator">
+    <div class="estimator-head">
+      <h2>Estimate an individual reproduction number</h2>
+      <p class="muted">
+        Provide <strong>at least one</strong> of the two attributes. The model handles either one alone, or
+        both together — that is the point of it.
+      </p>
+    </div>
+
+    <div class="estimator-grid">
+      <form class="controls" id="controls" autocomplete="off">
+
+        <fieldset class="control" id="control-x">
+          <div class="control-head">
+            <div>
+              <legend>Attribute 1 — Individual feature</legend>
+              <p class="control-note">
+                A standardized per-individual transmissibility characteristic. In the prototype this is a
+                single simulated value; in the full tool it is what clinical, sociodemographic, and omics
+                measurements would feed.
+              </p>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="use-x" checked>
+              <span class="switch-track" aria-hidden="true"></span>
+              <span class="switch-label">Provide</span>
+            </label>
+          </div>
+          <div class="control-body" id="body-x">
+            <div class="slider-row">
+              <input type="range" id="x-slider" min="-3" max="3" step="0.05" value="0">
+              <output class="readout" id="x-readout">0.00</output>
+            </div>
+            <div class="scale-hint">
+              <span>−3 · well below average</span>
+              <span>0 · average</span>
+              <span>+3 · well above average</span>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset class="control" id="control-scenario">
+          <div class="control-head">
+            <div>
+              <legend>Attribute 2 — Organism scenario</legend>
+              <p class="control-note">
+                Which of the two calibrated antibiotic-resistant organisms the individual is carrying.
+              </p>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="use-scenario" checked>
+              <span class="switch-track" aria-hidden="true"></span>
+              <span class="switch-label">Provide</span>
+            </label>
+          </div>
+          <div class="control-body" id="body-scenario">
+            <div class="segmented" id="scenario-choice" role="radiogroup" aria-label="Organism scenario"></div>
+            <p class="scenario-note" id="scenario-note"></p>
+          </div>
+        </fieldset>
+
+        <p class="form-error" id="form-error" role="alert" hidden>
+          Turn on at least one attribute — the model needs something to work from.
+        </p>
+      </form>
+
+      <div class="result" id="result" aria-live="polite">
+        <p class="result-label">Estimated individual reproduction number</p>
+        <p class="result-value" id="result-value">—</p>
+        <p class="result-flag" id="result-flag">Waiting for input</p>
+        <p class="result-meaning" id="result-meaning"></p>
+        <dl class="result-meta">
+          <div>
+            <dt>Inputs used</dt>
+            <dd id="meta-pattern">—</dd>
+          </div>
+          <div>
+            <dt>Test RMSE for this input pattern</dt>
+            <dd id="meta-rmse">—</dd>
+          </div>
+        </dl>
+      </div>
+    </div>
+
+    <figure class="chart-wrap">
+      <figcaption id="chart-caption">Predicted individual reproduction number across the feature range.</figcaption>
+      <div class="chart" id="chart"></div>
+    </figure>
+
+    <p class="reading-note">
+      <strong>How to read the flag.</strong> The estimate is an expected count of secondary infections from
+      this one individual. Above <span data-threshold="outbreak">1.1</span> we flag
+      <strong>outbreak potential</strong>: this individual is expected to more than replace themselves.
+      Below <span data-threshold="self_limiting">0.9</span> we flag <strong>self-limiting</strong>.
+      In between we flag <strong>borderline</strong> rather than pretending the model can separate the two —
+      the prototype's test error is several times the width of that band, so a near-one estimate is a
+      question, not an answer.
+    </p>
+  </section>
+
+  <section class="card">
+    <h2>What the full version will accept</h2>
+    <p>
+      The prototype exposes two attributes because the simulation that trained it has two. The production
+      tool is designed around the same missing-modality machinery, applied to real inputs: users will be able
+      to upload or connect <strong>clinical</strong> data (cultures, treatment and antibiotic exposure,
+      comorbidities, admissions), <strong>sociodemographic</strong> data (household structure, occupation,
+      contact patterns, sanitation and environmental context), and <strong>omics</strong> data (isolate
+      genomes, plasmid and resistance-gene content, microbiome composition) — and, in principle, further
+      modalities such as environmental surveillance or facility movement records.
+    </p>
+    <p>
+      Crucially, <strong>none of these is required</strong>. The training strategy demonstrated here — randomly
+      withholding modalities so the network learns to condition on what is actually present — is what lets a
+      user estimate with whatever they happen to have, rather than being locked out for lacking a data type.
+    </p>
+  </section>
+
+  <section class="card">
+    <h2>What we plan to release</h2>
+    <div class="release-grid">
+      <div class="release">
+        <h3>A library</h3>
+        <p>
+          The simulation, training, and prediction pipeline as an installable package, so that other groups
+          can retrain on their own populations, script batch estimates, and audit every step.
+        </p>
+      </div>
+      <div class="release">
+        <h3>A graphical interface</h3>
+        <p>
+          A tool in the spirit of this page, for users who need an estimate rather than an API — with data
+          upload, cohort-level views, and exportable results.
+        </p>
+      </div>
+    </div>
+    <p class="release-foot">Both will be released as <strong>open source software</strong>.</p>
+  </section>
+
+  <section class="card caveats">
+    <h2>Honest limitations</h2>
+    <ul>
+      <li>
+        The training data are <em>simulated</em>. This prototype demonstrates that the machinery works; it
+        does not yet say anything about real organisms or real patients.
+      </li>
+      <li>
+        The two organisms still contribute unequally to the training data, because the
+        higher-transmission one infects more agents. Training weights each scenario equally to compensate,
+        which is what lets an estimate from the individual feature alone sit between the two organisms
+        rather than collapsing onto the more common one — at the cost of some accuracy on that organism.
+      </li>
+      <li>
+        The estimate is an expected count. Realized secondary infections are highly dispersed, so a single
+        individual's outcome will often differ substantially from their expectation.
+      </li>
+      <li id="caveat-provenance">
+        Weights were exported from the fitted model on <span id="model-date">—</span>.
+      </li>
+    </ul>
+  </section>
+
+  <footer class="footer">
+    <p class="footer-attribution" data-site="attribution"></p>
+    <p class="footer-partners" id="footer-partners"></p>
+    <p class="footer-links">
+      <a id="repo-link" href="https://github.com/UofUEpiBio/wellcome-leap">Source repository</a>
+      <span class="dot">·</span>
+      <span data-site="license"></span>
+    </p>
+  </footer>
+
+  <div class="load-error" id="load-error" hidden>
+    <p><strong>The model file could not be loaded.</strong></p>
+    <p>
+      If you opened this page directly from disk, your browser blocks the local <code>fetch</code>. Serve the
+      folder instead:</p>
+    <pre><code>python3 -m http.server --directory app 8000</code></pre>
+    <p>then open <code>http://localhost:8000</code>.</p>
+  </div>
+
+</div>
+<script src="model.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
