@@ -8,12 +8,20 @@ error (RMSE) is the primary predictive-performance statistic.
 
 ## Production simulation data
 
-The model uses completed individual outcomes from all 1,000 production
-simulations per organism scenario. Each simulation contains 10,000
-agents observed for 60 days. Recovered infected agents enter the
-individual reproduction-number dataset, including agents with zero
-secondary infections; agents still exposed or infectious at the horizon
-are censored.
+The model uses analysis-eligible individual outcomes from all 1,000
+production simulations per organism scenario. Each simulation contains
+10,000 agents observed for 120 days. An agent enters the individual
+reproduction-number dataset when it was infected on or before day 60,
+therefore had at least 60 remaining days to transmit, was infected while
+at least 90% of the population was still susceptible, and had finished
+its infectious period by the horizon. Eligible agents with zero
+secondary infections are kept.
+
+Without that window the supervised target would be uninformative:
+averaged over every infected agent, `R_i` is pinned just below one by
+the final-size identity in any completed epidemic, no matter how
+transmissible the organism is. The [simulation
+experiment](simulation_experiment.md) quantifies the effect.
 
 ``` r
 library(torch)
@@ -35,7 +43,7 @@ run_counts <- table(study$runs$scenario)
 if (!identical(as.integer(run_counts[c("lower", "higher")]), c(1000L, 1000L))) {
   stop("The production manifest must contain 1,000 runs per scenario.")
 }
-agents <- study$agents[study$agents$outcome_complete, ]
+agents <- filter_analysis_agents(study$agents)
 rm(study)
 invisible(gc())
 ```
@@ -51,12 +59,12 @@ fit <- fit_masked_model(
   agents,
   train_fraction      = 0.70,
   validation_fraction = 0.15,
-  hidden_dim_1        = 16L,
-  hidden_dim_2        = 8L,
+  hidden_dim_1        = 32L,
+  hidden_dim_2        = 16L,
   learning_rate       = 0.01,
-  batch_size          = 131072L,
-  max_epochs          = 30L,
-  patience            = 5L,
+  batch_size          = 2048L,
+  max_epochs          = 60L,
+  patience            = 15L,
   seed                = 20260818L
 )
 
@@ -79,9 +87,9 @@ knitr::kable(split_summary)
 
 | partition  | runs | infected_agents | lower_agents | higher_agents |
 |:-----------|-----:|----------------:|-------------:|--------------:|
-| train      | 1400 |         6570615 |         6087 |       6564528 |
-| validation |  300 |         1404561 |         1329 |       1403232 |
-| test       |  300 |         1414277 |         1341 |       1412936 |
+| train      | 1400 |          631713 |         6239 |        625474 |
+| validation |  300 |          135311 |         1367 |        133944 |
+| test       |  300 |          133696 |         1369 |        132327 |
 
 During training, torch-native modality dropout independently assigns
 each observation one of three equally likely states: both inputs
@@ -89,8 +97,18 @@ retained, scenario dropped, or `X` dropped. Both modalities are never
 dropped together. The four network inputs are standardized `X`, encoded
 scenario, and the two observation indicators. Dropout is disabled during
 validation and inference, where the requested observation pattern is
-applied explicitly. The network has hidden widths 16 and 8 and a
+applied explicitly. The network has hidden widths 32 and 16 and a
 softplus output trained with Poisson negative log-likelihood.
+
+The analysis window makes the two scenarios very unequal in size. A
+`higher` epidemic leaves its early phase after about three weeks but
+infects almost the whole population, whereas a `lower` epidemic usually
+dies out with its five seeds, so eligible `higher` agents outnumber
+eligible `lower` agents by roughly a hundred to one. Two settings keep
+the rare scenario from being ignored. Early stopping averages the
+validation loss across scenarios before combining it across modality
+states with the dropout probabilities, and the batch size is small
+enough to give each epoch several hundred gradient steps.
 
 ## Fitting and validation history
 
@@ -98,7 +116,7 @@ softplus output trained with Poisson negative log-likelihood.
 fit$best_epoch
 ```
 
-    [1] 11
+    [1] 9
 
 ``` r
 knitr::kable(head(fit$history, 5), digits = 4)
@@ -106,11 +124,11 @@ knitr::kable(head(fit$history, 5), digits = 4)
 
 | epoch | training_loss | validation_loss |
 |------:|--------------:|----------------:|
-|     1 |        0.9195 |          0.8891 |
-|     2 |        0.8876 |          0.8886 |
-|     3 |        0.8884 |          0.8886 |
-|     4 |        0.8881 |          0.8887 |
-|     5 |        0.8883 |          0.8888 |
+|     1 |       -1.8354 |         -0.0839 |
+|     2 |       -1.9208 |         -0.2048 |
+|     3 |       -1.9201 |         -0.1735 |
+|     4 |       -1.9214 |         -0.2256 |
+|     5 |       -1.9219 |         -0.1796 |
 
 ``` r
 knitr::kable(tail(fit$history, 5), digits = 4)
@@ -118,11 +136,11 @@ knitr::kable(tail(fit$history, 5), digits = 4)
 
 |     | epoch | training_loss | validation_loss |
 |:----|------:|--------------:|----------------:|
-| 12  |    12 |        0.8880 |          0.8889 |
-| 13  |    13 |        0.8883 |          0.8886 |
-| 14  |    14 |        0.8881 |          0.8886 |
-| 15  |    15 |        0.8881 |          0.8886 |
-| 16  |    16 |        0.8883 |          0.8886 |
+| 20  |    20 |       -1.9201 |         -0.1811 |
+| 21  |    21 |       -1.9208 |         -0.1948 |
+| 22  |    22 |       -1.9206 |         -0.2153 |
+| 23  |    23 |       -1.9197 |         -0.1976 |
+| 24  |    24 |       -1.9217 |         -0.2260 |
 
 ``` r
 matplot(
@@ -155,17 +173,17 @@ rmse <- evaluate_masked_rmse(fit)
 knitr::kable(rmse, digits = 3)
 ```
 
-| pattern       | scenario |       n |  rmse |
-|:--------------|:---------|--------:|------:|
-| both          | overall  | 1414277 | 2.326 |
-| both          | higher   | 1412936 | 2.327 |
-| both          | lower    |    1341 | 1.040 |
-| x_only        | overall  | 1414277 | 2.326 |
-| x_only        | higher   | 1412936 | 2.327 |
-| x_only        | lower    |    1341 | 1.171 |
-| scenario_only | overall  | 1414277 | 2.398 |
-| scenario_only | higher   | 1412936 | 2.399 |
-| scenario_only | lower    |    1341 | 1.119 |
+| pattern       | scenario |      n |  rmse |
+|:--------------|:---------|-------:|------:|
+| both          | overall  | 133696 | 4.560 |
+| both          | higher   | 132327 | 4.582 |
+| both          | lower    |   1369 | 0.943 |
+| x_only        | overall  | 133696 | 4.576 |
+| x_only        | higher   | 132327 | 4.583 |
+| x_only        | lower    |   1369 | 3.908 |
+| scenario_only | overall  | 133696 | 5.040 |
+| scenario_only | higher   | 132327 | 5.065 |
+| scenario_only | lower    |   1369 | 1.083 |
 
 The overall comparison requested for the prediction interface is:
 
@@ -175,19 +193,20 @@ rownames(overall_rmse) <- NULL
 knitr::kable(overall_rmse, digits = 3)
 ```
 
-| pattern       |       n |  rmse |
-|:--------------|--------:|------:|
-| both          | 1414277 | 2.326 |
-| x_only        | 1414277 | 2.326 |
-| scenario_only | 1414277 | 2.398 |
+| pattern       |      n |  rmse |
+|:--------------|-------:|------:|
+| both          | 133696 | 4.560 |
+| x_only        | 133696 | 4.576 |
+| scenario_only | 133696 | 5.040 |
 
 Differences between the three RMSE values quantify the predictive cost
 of masking each input. RMSE is aligned with conditional-mean prediction
 and therefore with the expected-count interpretation of the Poisson
-model. Unmodeled epidemic timing and susceptible depletion still account
-for substantial individual variation. A later extension could add
-infection time or susceptible fraction while retaining the same
-modality-dropout interface.
+model. Even inside the analysis window, the intrinsic Poisson-like
+spread of realized offspring counts accounts for substantial individual
+variation, so RMSE stays large relative to the conditional means. A
+later extension could add infection time or susceptible fraction while
+retaining the same modality-dropout interface.
 
 The incomplete-input estimates are population averages over the missing
 feature. In particular, an `X`-only prediction cannot identify the

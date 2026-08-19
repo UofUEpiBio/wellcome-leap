@@ -87,6 +87,9 @@ set_effective_intercept <- function(
 
 #' Estimate early-epidemic reproduction in simulation
 #'
+#' Averages realized individual reproduction numbers over analysis-eligible
+#' agents only, as flagged by [individual_ri_eligible()].
+#'
 #' @param config Named simulation-configuration list.
 #' @param scenario Character scenario label.
 #' @param n_reps Number of simulation replicates.
@@ -107,8 +110,7 @@ estimate_early_reproduction <- function(
     scenarios = scenario,
     workers   = workers
   )
-  eligible <- result$agents$outcome_complete & result$agents$early_phase
-  values <- result$agents$secondary_cases[eligible]
+  values <- filter_analysis_agents(result$agents)$secondary_cases
   c(
     mean = mean(values),
     se = stats::sd(values) / sqrt(length(values)),

@@ -11,7 +11,9 @@ This experiment trains the native R `torch` surrogate with modality dropout and 
 
 ## Production simulation data
 
-The model uses completed individual outcomes from all 1,000 production simulations per organism scenario. Each simulation contains 10,000 agents observed for 60 days. Recovered infected agents enter the individual reproduction-number dataset, including agents with zero secondary infections; agents still exposed or infectious at the horizon are censored.
+The model uses analysis-eligible individual outcomes from all 1,000 production simulations per organism scenario. Each simulation contains 10,000 agents observed for 120 days. An agent enters the individual reproduction-number dataset when it was infected on or before day 60, therefore had at least 60 remaining days to transmit, was infected while at least 90% of the population was still susceptible, and had finished its infectious period by the horizon. Eligible agents with zero secondary infections are kept.
+
+Without that window the supervised target would be uninformative: averaged over every infected agent, `R_i` is pinned just below one by the final-size identity in any completed epidemic, no matter how transmissible the organism is. The [simulation experiment](simulation_experiment.md) quantifies the effect.
 
 ```{r}
 library(torch)
@@ -33,7 +35,7 @@ run_counts <- table(study$runs$scenario)
 if (!identical(as.integer(run_counts[c("lower", "higher")]), c(1000L, 1000L))) {
   stop("The production manifest must contain 1,000 runs per scenario.")
 }
-agents <- study$agents[study$agents$outcome_complete, ]
+agents <- filter_analysis_agents(study$agents)
 rm(study)
 invisible(gc())
 ```
@@ -47,12 +49,12 @@ fit <- fit_masked_model(
   agents,
   train_fraction      = 0.70,
   validation_fraction = 0.15,
-  hidden_dim_1        = 16L,
-  hidden_dim_2        = 8L,
+  hidden_dim_1        = 32L,
+  hidden_dim_2        = 16L,
   learning_rate       = 0.01,
-  batch_size          = 131072L,
-  max_epochs          = 30L,
-  patience            = 5L,
+  batch_size          = 2048L,
+  max_epochs          = 60L,
+  patience            = 15L,
   seed                = 20260818L
 )
 
@@ -73,7 +75,9 @@ rownames(split_summary) <- NULL
 knitr::kable(split_summary)
 ```
 
-During training, torch-native modality dropout independently assigns each observation one of three equally likely states: both inputs retained, scenario dropped, or `X` dropped. Both modalities are never dropped together. The four network inputs are standardized `X`, encoded scenario, and the two observation indicators. Dropout is disabled during validation and inference, where the requested observation pattern is applied explicitly. The network has hidden widths 16 and 8 and a softplus output trained with Poisson negative log-likelihood.
+During training, torch-native modality dropout independently assigns each observation one of three equally likely states: both inputs retained, scenario dropped, or `X` dropped. Both modalities are never dropped together. The four network inputs are standardized `X`, encoded scenario, and the two observation indicators. Dropout is disabled during validation and inference, where the requested observation pattern is applied explicitly. The network has hidden widths 32 and 16 and a softplus output trained with Poisson negative log-likelihood.
+
+The analysis window makes the two scenarios very unequal in size. A `higher` epidemic leaves its early phase after about three weeks but infects almost the whole population, whereas a `lower` epidemic usually dies out with its five seeds, so eligible `higher` agents outnumber eligible `lower` agents by roughly a hundred to one. Two settings keep the rare scenario from being ignored. Early stopping averages the validation loss across scenarios before combining it across modality states with the dropout probabilities, and the batch size is small enough to give each epoch several hundred gradient steps.
 
 ## Fitting and validation history
 
@@ -122,7 +126,7 @@ rownames(overall_rmse) <- NULL
 knitr::kable(overall_rmse, digits = 3)
 ```
 
-Differences between the three RMSE values quantify the predictive cost of masking each input. RMSE is aligned with conditional-mean prediction and therefore with the expected-count interpretation of the Poisson model. Unmodeled epidemic timing and susceptible depletion still account for substantial individual variation. A later extension could add infection time or susceptible fraction while retaining the same modality-dropout interface.
+Differences between the three RMSE values quantify the predictive cost of masking each input. RMSE is aligned with conditional-mean prediction and therefore with the expected-count interpretation of the Poisson model. Even inside the analysis window, the intrinsic Poisson-like spread of realized offspring counts accounts for substantial individual variation, so RMSE stays large relative to the conditional means. A later extension could add infection time or susceptible fraction while retaining the same modality-dropout interface.
 
 The incomplete-input estimates are population averages over the missing feature. In particular, an `X`-only prediction cannot identify the organism and a scenario-only prediction averages over the training distribution of `X`.
 

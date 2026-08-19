@@ -19,6 +19,81 @@ exclude_seed_pseudo_source <- function(reproduction) {
   ]
 }
 
+#' Last day of the approximately fully susceptible early phase
+#'
+#' An individual reproduction number only measures that individual's own
+#' transmissibility while the susceptible pool is still essentially intact.
+#' Once susceptibles are depleted, realized offspring counts are constrained by
+#' the epidemic's final size rather than by the agent's transmission
+#' probability.
+#'
+#' @param history Total-history data containing `date`, `state`, and `counts`.
+#' @param config Named simulation-configuration list.
+#'
+#' @return The last day on which at least `early_susceptible_fraction` of the
+#'   population was susceptible, or `-1` when the threshold is never met.
+#' @export
+early_phase_last_day <- function(
+    history,
+    config
+) {
+  required <- c("date", "state", "counts")
+  if (!all(required %in% names(history))) {
+    stop("history must contain: ", paste(required, collapse = ", "))
+  }
+  susceptible <- history[history$state == "Susceptible", , drop = FALSE]
+  early_days <- susceptible$date[
+    susceptible$counts / config$n_agents >= config$early_susceptible_fraction
+  ]
+  if (length(early_days)) max(early_days) else -1L
+}
+
+#' Flag individual reproduction numbers that are eligible for analysis
+#'
+#' An agent's realized `R_i` is analyzed only when the agent was given a full
+#' opportunity to transmit and was infected before susceptible depletion
+#' distorts offspring counts. Concretely, the agent must have been infected on
+#' or before `infection_cutoff_day`, must have had at least
+#' `min_transmission_days` of simulated time left after infection, and must
+#' have been infected during the early, approximately fully susceptible phase.
+#'
+#' @param infection_day Integer vector of agent infection (exposure) days.
+#' @param config Named simulation-configuration list.
+#' @param early_last_day Last early-phase day, as returned by
+#'   [early_phase_last_day()]. Use `Inf` to skip the depletion criterion.
+#'
+#' @return A logical vector flagging analyzable individual reproduction numbers.
+#' @export
+individual_ri_eligible <- function(
+    infection_day,
+    config,
+    early_last_day = Inf
+) {
+  transmission_window <- config$max_days - infection_day
+  !is.na(infection_day) &
+    infection_day <= config$infection_cutoff_day &
+    transmission_window >= config$min_transmission_days &
+    infection_day <= early_last_day
+}
+
+#' Restrict agent outcomes to analysis-eligible individual reproduction numbers
+#'
+#' Applies whichever of the `outcome_complete` and `analysis_eligible` flags are
+#' present, so the same filter can be used on production agent tables and on the
+#' small synthetic tables used by the tests.
+#'
+#' @param agents Agent-level outcome data.
+#'
+#' @return The subset of `agents` whose individual `R_i` is analyzable.
+#' @export
+filter_analysis_agents <- function(agents) {
+  keep <- rep(TRUE, nrow(agents))
+  for (flag in c("outcome_complete", "analysis_eligible")) {
+    if (flag %in% names(agents)) keep <- keep & agents[[flag]]
+  }
+  agents[keep, , drop = FALSE]
+}
+
 #' Extract individual and run-level transmission outcomes
 #'
 #' @param model_bundle List returned by [build_seirconn_model()].
@@ -58,11 +133,7 @@ extract_simulation_results <- function(
   )
   run_complete <- active_end == 0
 
-  susceptible <- history[history$state == "Susceptible", , drop = FALSE]
-  early_days <- susceptible$date[
-    susceptible$counts / config$n_agents >= config$early_susceptible_fraction
-  ]
-  early_last_day <- if (length(early_days)) max(early_days) else -1L
+  early_last_day <- early_phase_last_day(history, config)
 
   infection_edge <- transmissions[
     match(reproduction$source, transmissions$target),
@@ -73,6 +144,7 @@ extract_simulation_results <- function(
   n_infected <- nrow(reproduction)
   agent_final_state <- final_states[reproduction$source + 1L]
   agent_outcome_complete <- !agent_final_state %in% c("Exposed", "Infected")
+  infection_day <- reproduction$source_exposure_date
   agents <- data.frame(
     run_id = rep(run_id, n_infected),
     seed = rep(seed, n_infected),
@@ -81,12 +153,15 @@ extract_simulation_results <- function(
     agent_id = reproduction$source,
     x = agent_data$x[idx],
     p_transmit = agent_data$p_transmit[idx],
-    infection_day = reproduction$source_exposure_date,
+    infection_day = infection_day,
     source_id = infection_edge$source,
     secondary_cases = reproduction$rt,
     final_state = agent_final_state,
     outcome_complete = agent_outcome_complete,
-    early_phase = reproduction$source_exposure_date <= early_last_day,
+    transmission_window = config$max_days - infection_day,
+    early_phase = infection_day <= early_last_day,
+    analysis_eligible = agent_outcome_complete &
+      individual_ri_eligible(infection_day, config, early_last_day),
     final_epidemic_size = rep(n_infected, n_infected),
     extinct_early = rep(nrow(nonseed_edges) == 0L, n_infected),
     stringsAsFactors = FALSE
@@ -98,15 +173,15 @@ extract_simulation_results <- function(
     scenario = agent_data$scenario[1],
     organism = agent_data$organism[1],
     final_day = final_day,
+    early_last_day = early_last_day,
     final_epidemic_size = nrow(reproduction),
     nonseed_transmissions = nrow(nonseed_edges),
     active_at_end = active_end,
     outcome_complete = run_complete,
     extinct_early = nrow(nonseed_edges) == 0L,
-    early_mean_ri = if (any(agents$early_phase & agents$outcome_complete)) {
-      mean(agents$secondary_cases[
-        agents$early_phase & agents$outcome_complete
-      ])
+    eligible_agents = sum(agents$analysis_eligible),
+    eligible_mean_ri = if (any(agents$analysis_eligible)) {
+      mean(agents$secondary_cases[agents$analysis_eligible])
     } else {
       NA_real_
     },

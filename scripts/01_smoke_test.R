@@ -9,7 +9,7 @@ result <- run_simulation_study(config, n_reps = 2L, workers = 4L)
 print(result$runs)
 print(aggregate(
   secondary_cases ~ scenario,
-  result$agents[result$agents$early_phase, ],
+  filter_analysis_agents(result$agents),
   mean
 ))
 

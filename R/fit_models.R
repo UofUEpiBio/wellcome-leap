@@ -60,6 +60,11 @@ poisson_loss_matrix <- function(
 
 #' Train the masked R torch count model
 #'
+#' The early-stopping criterion averages the validation Poisson loss over
+#' scenarios before averaging over modality states. Scenarios contribute very
+#' unequal agent counts, so a pooled criterion would let the more numerous
+#' scenario decide when training stops.
+#'
 #' @param training_data Agent-level training data.
 #' @param validation_data Agent-level validation data.
 #' @param preprocessor Training-derived preprocessing metadata.
@@ -101,6 +106,10 @@ train_masked_torch <- function(
     modality_dropout_probabilities = modality_dropout_probabilities
   )
   optimizer <- torch::optim_adam(model$parameters, lr = learning_rate)
+  validation_groups <- split(
+    seq_len(nrow(validation_data)),
+    validation_data$scenario
+  )
 
   best_loss <- Inf
   best_state <- NULL
@@ -138,12 +147,19 @@ train_masked_torch <- function(
     validation_losses <- vapply(
       names(modality_dropout_probabilities),
       function(pattern) {
-        poisson_loss_matrix(
-          model,
-          make_masked_matrix(validation_data, pattern, preprocessor),
-          validation_data$secondary_cases,
-          batch_size = batch_size
-        )
+        input <- make_masked_matrix(validation_data, pattern, preprocessor)
+        mean(vapply(
+          validation_groups,
+          function(rows) {
+            poisson_loss_matrix(
+              model,
+              input[rows, , drop = FALSE],
+              validation_data$secondary_cases[rows],
+              batch_size = batch_size
+            )
+          },
+          numeric(1)
+        ))
       },
       numeric(1)
     )
@@ -183,6 +199,9 @@ train_masked_torch <- function(
 
 #' Fit the complete missing-data-aware model workflow
 #'
+#' Training uses analysis-eligible individual reproduction numbers only, as
+#' selected by [filter_analysis_agents()].
+#'
 #' @param data Agent-level simulation data.
 #' @param train_fraction Fraction of runs assigned to training.
 #' @param validation_fraction Fraction of runs assigned to validation.
@@ -211,7 +230,7 @@ fit_masked_model <- function(
     seed                           = 20260818L,
     modality_dropout_probabilities = default_modality_dropout_probabilities()
 ) {
-  data <- data[data$outcome_complete, , drop = FALSE]
+  data <- filter_analysis_agents(data)
   split <- split_by_run(data, train_fraction, validation_fraction, seed)
   preprocessor <- fit_preprocessor(split$train)
   trained <- train_masked_torch(

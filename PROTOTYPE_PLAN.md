@@ -73,7 +73,9 @@ Provisional values for an initial smoke test, subject to approval:
 | Initial infected/exposed seeds | 5 agents | Keeps the early epidemic close to the branching-process regime |
 | Mean incubation period | 7 days | Simple toy-model value |
 | Daily recovery probability | 0.20 | Mean infectious duration of about 5 days |
-| Simulation horizon | 60 days | Requested fixed horizon; active individual outcomes are censored |
+| Simulation horizon | 120 days | Fixed horizon; active individual outcomes are censored |
+| Infection-day cutoff for analysis | 60 days | Every analyzed agent keeps at least 60 days of transmission opportunity |
+| Minimum transmission window | 30 days | Floor enforced against the horizon so no analyzed \(R_i\) is right-censored |
 | \(X\) distribution | Standard normal | Requested |
 | \(\beta\) | 1 | Gives an \(e\)-fold transmission-odds ratio per standard deviation of \(X\) |
 
@@ -114,7 +116,14 @@ Seed agents must be selected independently of \(X\) unless preferential seeding 
 
 ### Retained agent records
 
-The dataset will include **every infected agent with complete individual follow-up**, including agents who caused zero secondary infections. At the 60-day horizon, agents still exposed or infectious are flagged as censored and excluded from supervised training. Restricting complete data to agents who infected at least one person would create a zero-truncated outcome, bias the relationship between \(X\) and transmission, and prevent the model from learning non-transmission.
+The dataset will include **every infected agent whose realized \(R_i\) measures that agent's own transmissibility**, including agents who caused zero secondary infections. Restricting complete data to agents who infected at least one person would create a zero-truncated outcome, bias the relationship between \(X\) and transmission, and prevent the model from learning non-transmission.
+
+Two distinct mechanisms would otherwise corrupt the target, and the `analysis_eligible` flag excludes both:
+
+- **Right-censoring.** An agent infected close to the horizon has not finished transmitting. Agents infected after the 60-day cutoff are excluded, which leaves every analyzed agent at least 60 days of transmission opportunity inside the 120-day horizon; agents still exposed or infectious at the horizon are excluded as well.
+- **Susceptible depletion.** Once susceptibles run out, offspring counts are capped by the epidemic's final size rather than by \(X\) and the organism. Agents infected after the population drops below 90% susceptible are excluded. This is the binding constraint in the higher-transmission scenario, which leaves its early phase after roughly three weeks.
+
+Both matter because the unfiltered average is an identity, not an estimate: every non-seed infection is somebody's secondary case, so averaging \(R_i\) over all infected agents in a completed epidemic returns \((\text{final size} - \text{seeds}) / \text{final size}\), a number just below one regardless of transmissibility.
 
 Minimum long-form schema:
 
@@ -131,7 +140,9 @@ Minimum long-form schema:
 | `source_id` | Infector, where applicable |
 | `secondary_cases` | Number of targets infected by this agent |
 | `outcome_complete` | Whether the agent had complete transmission follow-up |
-| `early_phase` | Whether the record belongs to the calibration window |
+| `transmission_window` | Days between infection and the simulation horizon |
+| `early_phase` | Whether the agent was infected before susceptible depletion |
+| `analysis_eligible` | Whether the realized \(R_i\) enters calibration, reports, and training |
 | `final_epidemic_size` | Replicate-level epidemic size |
 | `extinct_early` | Indicator of stochastic early extinction |
 
@@ -184,7 +195,7 @@ Calibration will occur before the 1,000-run-per-scenario production stage.
 ### Phase C: production simulation
 
 - Run 1,000 independent replicates per scenario.
-- Run each epidemic for the fixed 60-day horizon and flag agents still exposed or infectious as right-censored rather than treating their current counts as final outcomes.
+- Run each epidemic for the fixed 120-day horizon, analyze only agents infected within the first 60 days, and flag agents still exposed or infectious as right-censored rather than treating their current counts as final outcomes.
 - Parallelize at the replicate or batch level with deterministic random-number streams.
 - Write results in batches to avoid holding all raw histories in memory.
 - Save compact columnar data (preferably Parquet) plus CSV summaries for accessibility.
@@ -322,7 +333,7 @@ The scientific design and local compute environment have been resolved, and the 
 - Prioritize approximate \(R_0\) targets of 0.5 and 4.0 and create the difference through the scenario-specific probability-of-transmission function.
 - Use individual realized secondary-case count \(R_i\), as returned in the `rt` column of `get_reproductive_number()`.
 - Retain all infected agents, including zero-secondary-case agents.
-- Use the configured incubation, recovery, five-agent seeding, and 60-day horizon values for the toy prototype.
+- Use the configured incubation, recovery, five-agent seeding, and 120-day horizon values for the toy prototype, analyzing only agents infected within the first 60 days.
 - Use one compact missingness-augmented R `torch` model that supports both features, \(X\) only, or scenario only.
 
 ### Gate 2: calibrated pilot — complete
