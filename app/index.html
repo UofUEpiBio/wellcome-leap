@@ -27,6 +27,25 @@
   <!-- ------------------------------------------------------------------ -->
   <section class="panel" id="panel-estimator" role="tabpanel" aria-labelledby="tab-estimator">
 
+    <section class="card intro">
+      <h2>What this tool is</h2>
+      <p>
+        This page was created by our team for the <strong data-site="programme">Wellcome Leap</strong>
+        <strong data-site="consortium">AMPLIFY</strong> proposal. It is a <strong>functional prototype</strong>:
+        every number it shows comes from a model we actually fitted, evaluated in your browser, not from a
+        mock-up. A user supplies whatever they have — a colonisation density, an organism identification, or
+        only one of the two — and gets an interpretable estimate back immediately.
+      </p>
+      <p>
+        The two indicators below are exactly the two inputs the model was trained on: a quantitative
+        measurement of how densely the individual is colonised, and the organism they carry.
+        Their mapping onto the training data is one to one and is written out under
+        <a href="#method" data-tab-link="method">How it works</a>. The machinery — including the ability to
+        estimate with one indicator missing — is real; the training data are simulated, so the numbers
+        demonstrate the method rather than describing any real population.
+      </p>
+    </section>
+
     <section class="card estimator" id="estimator">
       <div class="estimator-head">
         <h2>Estimate an individual reproduction number</h2>
@@ -127,25 +146,6 @@
         In between we flag <strong>borderline</strong> rather than pretending the model can separate the two —
         realized secondary infections are far more variable than the width of that band, so a near-one
         estimate is a question, not an answer.
-      </p>
-    </section>
-
-    <section class="card intro">
-      <h2>What this tool is</h2>
-      <p>
-        This page was created by our team for the <strong data-site="programme">Wellcome Leap</strong>
-        <strong data-site="consortium">AMPLIFY</strong> proposal. It is a <strong>functional prototype</strong>:
-        every number it shows comes from a model we actually fitted, evaluated in your browser, not from a
-        mock-up. A user supplies whatever they have — colonisation and exposure measurements, an organism
-        identification, or only one of the two — and gets an interpretable estimate back immediately.
-      </p>
-      <p>
-        The two indicators are exactly the two inputs the model was trained on, one per modality: a
-        quantitative measurement of how densely the individual is colonised, and the organism they carry.
-        Their mapping onto the training data is one to one and is written out under
-        <a href="#method" data-tab-link="method">How it works</a>. The machinery — including the ability to
-        estimate with one indicator missing — is real; the training data are simulated, so the numbers
-        demonstrate the method rather than describing any real population.
       </p>
     </section>
 

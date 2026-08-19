@@ -36,11 +36,11 @@ retraining; nothing else in the app needs to change.
 
 ## Page layout
 
-The page has two tabs, driven entirely by `app.js`: **Estimator**, which carries
-the tool itself and a short statement of what it is, and **How it works**, which
-carries the three-piece description, the input mapping, and the scope of the
-full version. The tab is reflected in the URL fragment (`#estimator`,
-`#method`), so either view can be linked directly.
+The page has two tabs, driven entirely by `app.js`: **Estimator**, which opens
+with a short statement of what the tool is and then the tool itself, and
+**How it works**, which carries the three-piece description, the indicator
+mapping, and the scope of the full version. The tab is reflected in the URL
+fragment (`#estimator`, `#method`), so either view can be linked directly.
 
 ## Editing the wording
 
