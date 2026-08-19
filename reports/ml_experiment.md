@@ -13,7 +13,7 @@ production simulations per organism scenario. Each simulation contains
 10,000 agents observed for 120 days. An agent enters the individual
 reproduction-number dataset when it was infected on or before day 60,
 therefore had at least 60 remaining days to transmit, was infected while
-at least 90% of the population was still susceptible, and had finished
+at least 95% of the population was still susceptible, and had finished
 its infectious period by the horizon. Eligible agents with zero
 secondary infections are kept.
 
@@ -33,6 +33,7 @@ source("../R/simulate.R")
 source("../R/masking.R")
 source("../R/torch_model.R")
 source("../R/fit_models.R")
+source("../R/predict.R")
 
 config <- default_simulation_config()
 study <- load_simulation_batches(
@@ -87,9 +88,9 @@ knitr::kable(split_summary)
 
 | partition  | runs | infected_agents | lower_agents | higher_agents |
 |:-----------|-----:|----------------:|-------------:|--------------:|
-| train      | 1400 |          631713 |         6239 |        625474 |
-| validation |  300 |          135311 |         1367 |        133944 |
-| test       |  300 |          133696 |         1369 |        132327 |
+| train      | 1400 |          402625 |        75683 |        326942 |
+| validation |  300 |           87977 |        18124 |         69853 |
+| test       |  300 |           88055 |        17664 |         70391 |
 
 During training, torch-native modality dropout independently assigns
 each observation one of three equally likely states: both inputs
@@ -100,15 +101,19 @@ validation and inference, where the requested observation pattern is
 applied explicitly. The network has hidden widths 32 and 16 and a
 softplus output trained with Poisson negative log-likelihood.
 
-The analysis window makes the two scenarios very unequal in size. A
-`higher` epidemic leaves its early phase after about three weeks but
-infects almost the whole population, whereas a `lower` epidemic usually
-dies out with its five seeds, so eligible `higher` agents outnumber
-eligible `lower` agents by roughly a hundred to one. Two settings keep
-the rare scenario from being ignored. Early stopping averages the
-validation loss across scenarios before combining it across modality
-states with the dropout probabilities, and the batch size is small
-enough to give each epoch several hundred gradient steps.
+The analysis window still admits roughly four times as many `higher`
+agents as `lower` agents, because the `higher` epidemic infects the
+whole population while the `lower` epidemic is limited by the day-60
+infection cutoff. That imbalance matters most when an input is hidden: a
+prediction made from `X` alone is an average over organisms, so
+whichever scenario supplies more rows would otherwise decide it. Three
+settings keep the scenarios on equal terms. Training rows are weighted
+by [`scenario_balance_weights()`](../R/fit_models.R) so that each
+scenario contributes the same total weight to the Poisson likelihood,
+early stopping averages the validation loss across scenarios before
+combining it across modality states with the dropout probabilities, and
+the batch size is small enough to give each epoch several hundred
+gradient steps.
 
 ## Fitting and validation history
 
@@ -116,7 +121,7 @@ enough to give each epoch several hundred gradient steps.
 fit$best_epoch
 ```
 
-    [1] 9
+    [1] 25
 
 ``` r
 knitr::kable(head(fit$history, 5), digits = 4)
@@ -124,11 +129,11 @@ knitr::kable(head(fit$history, 5), digits = 4)
 
 | epoch | training_loss | validation_loss |
 |------:|--------------:|----------------:|
-|     1 |       -1.8354 |         -0.0839 |
-|     2 |       -1.9208 |         -0.2048 |
-|     3 |       -1.9201 |         -0.1735 |
-|     4 |       -1.9214 |         -0.2256 |
-|     5 |       -1.9219 |         -0.1796 |
+|     1 |        0.2607 |          0.2229 |
+|     2 |        0.2252 |          0.2228 |
+|     3 |        0.2252 |          0.2234 |
+|     4 |        0.2254 |          0.2239 |
+|     5 |        0.2253 |          0.2260 |
 
 ``` r
 knitr::kable(tail(fit$history, 5), digits = 4)
@@ -136,11 +141,11 @@ knitr::kable(tail(fit$history, 5), digits = 4)
 
 |     | epoch | training_loss | validation_loss |
 |:----|------:|--------------:|----------------:|
-| 20  |    20 |       -1.9201 |         -0.1811 |
-| 21  |    21 |       -1.9208 |         -0.1948 |
-| 22  |    22 |       -1.9206 |         -0.2153 |
-| 23  |    23 |       -1.9197 |         -0.1976 |
-| 24  |    24 |       -1.9217 |         -0.2260 |
+| 36  |    36 |        0.2266 |          0.2237 |
+| 37  |    37 |        0.2243 |          0.2230 |
+| 38  |    38 |        0.2223 |          0.2234 |
+| 39  |    39 |        0.2252 |          0.2249 |
+| 40  |    40 |        0.2255 |          0.2233 |
 
 ``` r
 matplot(
@@ -173,17 +178,17 @@ rmse <- evaluate_masked_rmse(fit)
 knitr::kable(rmse, digits = 3)
 ```
 
-| pattern       | scenario |      n |  rmse |
-|:--------------|:---------|-------:|------:|
-| both          | overall  | 133696 | 4.560 |
-| both          | higher   | 132327 | 4.582 |
-| both          | lower    |   1369 | 0.943 |
-| x_only        | overall  | 133696 | 4.576 |
-| x_only        | higher   | 132327 | 4.583 |
-| x_only        | lower    |   1369 | 3.908 |
-| scenario_only | overall  | 133696 | 5.040 |
-| scenario_only | higher   | 132327 | 5.065 |
-| scenario_only | lower    |   1369 | 1.083 |
+| pattern       | scenario |     n |  rmse |
+|:--------------|:---------|------:|------:|
+| both          | overall  | 88055 | 3.003 |
+| both          | higher   | 70391 | 3.219 |
+| both          | lower    | 17664 | 1.914 |
+| x_only        | overall  | 88055 | 3.102 |
+| x_only        | higher   | 70391 | 3.310 |
+| x_only        | lower    | 17664 | 2.072 |
+| scenario_only | overall  | 88055 | 3.208 |
+| scenario_only | higher   | 70391 | 3.438 |
+| scenario_only | lower    | 17664 | 2.047 |
 
 The overall comparison requested for the prediction interface is:
 
@@ -193,11 +198,11 @@ rownames(overall_rmse) <- NULL
 knitr::kable(overall_rmse, digits = 3)
 ```
 
-| pattern       |      n |  rmse |
-|:--------------|-------:|------:|
-| both          | 133696 | 4.560 |
-| x_only        | 133696 | 4.576 |
-| scenario_only | 133696 | 5.040 |
+| pattern       |     n |  rmse |
+|:--------------|------:|------:|
+| both          | 88055 | 3.003 |
+| x_only        | 88055 | 3.102 |
+| scenario_only | 88055 | 3.208 |
 
 Differences between the three RMSE values quantify the predictive cost
 of masking each input. RMSE is aligned with conditional-mean prediction
@@ -212,6 +217,58 @@ The incomplete-input estimates are population averages over the missing
 feature. In particular, an `X`-only prediction cannot identify the
 organism and a scenario-only prediction averages over the training
 distribution of `X`.
+
+## Conditional means by observation pattern
+
+RMSE is dominated by the irreducible spread of a count outcome, so it
+cannot show whether the three patterns are centered correctly. This
+table compares each pattern against the empirical mean `R_i` of the test
+agents in a narrow band around `X = -1`, `0`, and `1`.
+
+``` r
+x_targets <- c(-1, 0, 1)
+x_tolerance <- 0.1
+test_data <- fit$split$test
+conditional_means <- do.call(rbind, lapply(
+  c("lower", "higher"),
+  function(scenario) {
+    do.call(rbind, lapply(x_targets, function(x_value) {
+      rows <- test_data$scenario == scenario &
+        abs(test_data$x - x_value) <= x_tolerance
+      predicted <- function(...) {
+        predict_secondary_cases(fit, ...)$predicted_secondary_cases
+      }
+      data.frame(
+        scenario = scenario,
+        x = x_value,
+        test_agents = sum(rows),
+        empirical = mean(test_data$secondary_cases[rows]),
+        both = predicted(x = x_value, scenario = scenario),
+        x_only = predicted(x = x_value),
+        scenario_only = predicted(scenario = scenario)
+      )
+    }))
+  }
+))
+knitr::kable(conditional_means, digits = 3, row.names = FALSE)
+```
+
+| scenario |   x | test_agents | empirical |  both | x_only | scenario_only |
+|:---------|----:|------------:|----------:|------:|-------:|--------------:|
+| lower    |  -1 |         848 |     0.827 | 0.846 |  1.341 |         1.463 |
+| lower    |   0 |        1372 |     1.310 | 1.341 |  2.059 |         1.463 |
+| lower    |   1 |         867 |     2.038 | 2.079 |  3.165 |         1.463 |
+| higher   |  -1 |        3376 |     1.825 | 1.853 |  1.341 |         2.982 |
+| higher   |   0 |        5723 |     2.797 | 2.802 |  2.059 |         2.982 |
+| higher   |   1 |        3438 |     4.039 | 4.275 |  3.165 |         2.982 |
+
+The `both` column tracks the empirical means. The `x_only` column is the
+same for the two scenarios by construction and lands close to their
+midpoint, which is what a balanced average over an unknown organism
+should do. The `scenario_only` column is constant in `X` and reproduces
+that scenario’s overall eligible mean. Each single-input prediction is
+therefore off by well under a factor of two in either direction, and
+both inputs together remove that spread.
 
 ## Save local prediction artifacts
 
