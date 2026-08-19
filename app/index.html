@@ -31,46 +31,45 @@
       <div class="estimator-head">
         <h2>Estimate an individual reproduction number</h2>
         <p class="muted">
-          Provide the <strong>carrier profile</strong>, the <strong>organism</strong>, or both. The model
-          handles either one alone — that is the point of it.
+          Two indicators, and the model needs only one of them: the individual's
+          <strong>colonisation density</strong>, the <strong>organism</strong>, or both. That is the point of
+          it.
         </p>
       </div>
 
       <div class="estimator-grid">
         <form class="controls" id="controls" autocomplete="off">
 
-          <fieldset class="control" id="control-profile">
+          <fieldset class="control" id="control-indicator">
             <div class="control-head">
               <div>
-                <legend id="profile-legend">Carrier profile</legend>
-                <p class="control-note" id="profile-note"></p>
+                <legend id="indicator-legend">Colonisation density</legend>
+                <p class="control-note" id="indicator-note"></p>
               </div>
               <label class="switch">
-                <input type="checkbox" id="use-profile" checked>
+                <input type="checkbox" id="use-indicator" checked>
                 <span class="switch-track" aria-hidden="true"></span>
                 <span class="switch-label">Provide</span>
               </label>
             </div>
-            <div class="control-body" id="body-profile">
-              <div class="field" id="driver-field">
+            <div class="control-body" id="body-indicator">
+              <div class="field">
                 <div class="field-head">
-                  <label class="field-label" for="driver-slider" id="driver-label"></label>
-                  <span class="chip" id="driver-modality"></span>
+                  <label class="field-label" for="indicator-slider" id="indicator-label"></label>
+                  <span class="chip" id="indicator-modality"></span>
                 </div>
                 <div class="slider-row">
-                  <input type="range" id="driver-slider">
-                  <output class="readout" id="driver-readout"></output>
+                  <input type="range" id="indicator-slider">
+                  <output class="readout" id="indicator-readout"></output>
                 </div>
-                <div class="scale-hint" id="driver-hints"></div>
+                <div class="scale-hint" id="indicator-hints"></div>
               </div>
-
-              <div class="modifiers" id="modifiers"></div>
 
               <div class="index-row">
-                <span class="index-label" id="index-label">Transmissibility index</span>
-                <span class="index-value" id="index-value">0.00</span>
+                <span class="index-label" id="feature-label">Standardized feature</span>
+                <span class="index-value" id="feature-value">0.00</span>
               </div>
-              <p class="index-note" id="index-note"></p>
+              <p class="index-note" id="feature-note"></p>
             </div>
           </fieldset>
 
@@ -93,7 +92,7 @@
           </fieldset>
 
           <p class="form-error" id="form-error" role="alert" hidden>
-            Turn on the carrier profile, the organism, or both — the model needs something to work from.
+            Turn on colonisation density, the organism, or both — the model needs something to work from.
           </p>
         </form>
 
@@ -108,8 +107,8 @@
               <dd id="meta-pattern">—</dd>
             </div>
             <div>
-              <dt>Transmissibility index</dt>
-              <dd id="meta-index">—</dd>
+              <dt>Standardized feature</dt>
+              <dd id="meta-feature">—</dd>
             </div>
           </dl>
         </div>
@@ -141,12 +140,12 @@
         identification, or only one of the two — and gets an interpretable estimate back immediately.
       </p>
       <p>
-        The inputs are labelled with the clinical, microbiological, and omics quantities the delivered tool is
-        designed around. Underneath, the prototype's simulation supplies a single standardized
-        transmissibility feature, so the page maps the profile items onto that one feature with the
-        illustrative weights shown under <a href="#method" data-tab-link="method">How it works</a>. The
-        machinery — including the ability to estimate with a whole modality missing — is real; the numerical
-        weight of any individual clinical item is not yet.
+        The two indicators are exactly the two inputs the model was trained on, one per modality: a
+        quantitative measurement of how densely the individual is colonised, and the organism they carry.
+        Their mapping onto the training data is one to one and is written out under
+        <a href="#method" data-tab-link="method">How it works</a>. The machinery — including the ability to
+        estimate with one indicator missing — is real; the training data are simulated, so the numbers
+        demonstrate the method rather than describing any real population.
       </p>
     </section>
 
@@ -203,33 +202,32 @@
     </section>
 
     <section class="card">
-      <h2>How the inputs map onto the model</h2>
+      <h2>How the two indicators map onto the model</h2>
       <p>
-        The fitted surrogate takes exactly two things: one standardized individual feature and the organism
-        label. The simulation behind it generates that feature directly, so it has no clinical units of its
-        own. To keep the estimator recognisable, this page presents it as a <strong>transmissibility
-        index</strong> assembled from familiar carriage, exposure, and contact measurements:
+        The fitted surrogate takes exactly two things, and the estimator exposes exactly those two. The
+        mapping is one to one, so any estimate on the first tab can be traced straight back to a row of the
+        training data:
       </p>
       <div class="table-wrap">
         <table class="mapping" id="mapping-table">
           <thead>
-            <tr><th>Input</th><th>Modality</th><th>Contribution to the index</th></tr>
+            <tr><th>Indicator in the app</th><th>Model input</th><th>Mapping</th></tr>
           </thead>
           <tbody></tbody>
         </table>
       </div>
       <p>
-        The contributions are <strong>illustrative</strong>: they encode the direction and rough ordering that
-        the AMR literature supports, not weights estimated from patient data. They live in
-        <code>app/site.json</code> and can be edited without touching any code. The index is capped at ±3, the
-        range the training data covers. Everything downstream of the index — the network, the missing-modality
-        behaviour, the estimate — is the fitted model.
+        The feature the simulation generates is standard normal and carries no clinical units of its own, so
+        the page reads colonisation density as a z-score against an assumed population mean and standard
+        deviation. Those two constants, the slider range, and the organism names live in
+        <code>app/site.json</code> and can be edited without touching any code. Everything downstream of the
+        z-score — the network, the missing-modality behaviour, the estimate — is the fitted model.
       </p>
       <p>
-        The organism choice is a relabelling of the same kind. The simulation calibrates a lower- and a
-        higher-transmission organism, near population reproduction numbers of 1.5 and 3.0; the page presents
-        them as an ESBL-producing <em>E. coli</em> and a carbapenem-resistant <em>K. pneumoniae</em> so the
-        contrast is concrete. The estimates are not organism-specific evidence about either species.
+        The organism choice is a relabelling of the same kind: the simulation calibrates a lower- and a
+        higher-transmission organism, near population reproduction numbers of 1.5 and 3.0, and the page names
+        them so the contrast is concrete. The estimates are not organism-specific evidence about either
+        species, and the density scale is illustrative rather than fitted to patient data.
       </p>
       <p class="provenance">Weights exported from the fitted model on <span id="model-date">—</span>.</p>
     </section>
@@ -237,7 +235,7 @@
     <section class="card">
       <h2>What the full version will accept</h2>
       <p>
-        The prototype exposes two modalities because the simulation that trained it has two. The production
+        The prototype exposes two indicators because the simulation that trained it has two. The production
         tool is designed around the same missing-modality machinery, applied to real inputs: users will be able
         to upload or connect <strong>clinical</strong> data (cultures, treatment and antibiotic exposure,
         comorbidities, admissions), <strong>sociodemographic</strong> data (household structure, occupation,

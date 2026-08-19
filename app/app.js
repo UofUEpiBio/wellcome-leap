@@ -5,25 +5,24 @@
  * settings (site.json), then re-evaluates the surrogate on every input change.
  *
  * The surrogate takes one standardized individual feature and the organism
- * label. The page presents that feature as a clinically recognisable
- * transmissibility index: site.json describes a continuous driver plus a set of
- * categorical modifiers, and this file collapses them into the single value the
- * model consumes. The mapping is presentation only; nothing here touches the
- * fitted weights. Everything runs locally, with no server component.
+ * label, so the page exposes exactly two indicators. The first, colonisation
+ * density, becomes the feature by way of a z-score against the population mean
+ * and standard deviation named in site.json; the second is the organism itself.
+ * The mapping is presentation only; nothing here touches the fitted weights.
+ * Everything runs locally, with no server component.
  */
 (function () {
   "use strict";
 
-  /** The training features are standardized, so the model never saw |x| > 3. */
-  const INDEX_LIMIT = 3;
+  /** The training feature is standardized, so the model never saw |z| > 3. */
+  const FEATURE_LIMIT = 3;
 
   const state = {
     model: null,
     site: null,
-    useProfile: true,
+    useIndicator: true,
     useScenario: true,
-    driver: 0,
-    modifiers: {},
+    density: 0,
     scenario: "higher"
   };
 
@@ -43,7 +42,7 @@
       state.model = loaded[0];
       state.site = loaded[1];
       applySite();
-      buildProfileControls();
+      buildIndicatorControl();
       buildScenarioChoice();
       buildMappingTable();
       bindControls();
@@ -75,24 +74,16 @@
     const generated = state.model.generated;
     if (generated && generated.date) el("model-date").textContent = generated.date;
 
-    el("profile-legend").textContent = profile().label;
-    el("profile-note").textContent = profile().note;
-    el("index-label").textContent = profile().index_label;
-    el("index-note").textContent = profile().index_note;
+    el("indicator-legend").textContent = indicator().label;
+    el("indicator-note").textContent = indicator().note;
+    el("feature-label").textContent = indicator().feature_label;
+    el("feature-note").textContent = indicator().feature_note;
     el("organism-legend").textContent = site.organism_label;
     el("organism-note").textContent = site.organism_note;
   }
 
-  function profile() {
-    return state.site.profile;
-  }
-
-  function driver() {
-    return profile().driver;
-  }
-
-  function modifiers() {
-    return profile().modifiers;
+  function indicator() {
+    return state.site.indicator;
   }
 
   function scenarios() {
@@ -105,64 +96,25 @@
 
   /* ---------- controls ---------- */
 
-  function buildProfileControls() {
-    const spec = driver();
-    state.driver = spec.value;
+  function buildIndicatorControl() {
+    const spec = indicator();
+    state.density = spec.value;
 
-    el("driver-label").textContent = spec.label + " (" + spec.unit + ")";
-    el("driver-modality").textContent = spec.modality;
-    const slider = el("driver-slider");
+    // The fieldset legend already names the indicator; label the slider by its unit.
+    el("indicator-label").textContent = spec.unit;
+    el("indicator-modality").textContent = spec.modality;
+    const slider = el("indicator-slider");
     slider.min = String(spec.min);
     slider.max = String(spec.max);
     slider.step = String(spec.step);
     slider.value = String(spec.value);
 
-    const hints = el("driver-hints");
+    const hints = el("indicator-hints");
     hints.innerHTML = "";
     (spec.hints || []).forEach(function (hint) {
       const span = document.createElement("span");
       span.textContent = hint;
       hints.appendChild(span);
-    });
-
-    const host = el("modifiers");
-    host.innerHTML = "";
-    modifiers().forEach(function (modifier) {
-      state.modifiers[modifier.id] = modifier.value;
-
-      const field = document.createElement("div");
-      field.className = "field";
-
-      const head = document.createElement("div");
-      head.className = "field-head";
-      const label = document.createElement("label");
-      label.className = "field-label";
-      label.htmlFor = "modifier-" + modifier.id;
-      label.textContent = modifier.label;
-      const chip = document.createElement("span");
-      chip.className = "chip";
-      chip.textContent = modifier.modality;
-      head.appendChild(label);
-      head.appendChild(chip);
-
-      const select = document.createElement("select");
-      select.className = "select";
-      select.id = "modifier-" + modifier.id;
-      modifier.options.forEach(function (option, index) {
-        const node = document.createElement("option");
-        node.value = String(index);
-        node.textContent = option.label;
-        select.appendChild(node);
-      });
-      select.value = String(modifier.value);
-      select.addEventListener("change", function (event) {
-        state.modifiers[modifier.id] = parseInt(event.target.value, 10);
-        update();
-      });
-
-      field.appendChild(head);
-      field.appendChild(select);
-      host.appendChild(field);
     });
   }
 
@@ -183,56 +135,58 @@
     });
   }
 
-  /** Document the presentation-only index mapping on the methods tab. */
+  /** Write out the presentation-only mapping on the methods tab. */
   function buildMappingTable() {
-    const spec = driver();
+    const spec = indicator();
+    const levels = state.model.preprocessor.scenario_levels;
     const body = el("mapping-table").querySelector("tbody");
     body.innerHTML = "";
 
-    const rows = [{
-      label: spec.label + " (" + spec.unit + ")",
-      modality: spec.modality,
-      contribution:
-        formatNumber(spec.weight) + " per unit above " + formatNumber(spec.center, 1) +
-        " (range " + formatNumber(spec.min, 1) + "–" + formatNumber(spec.max, 1) + ")"
-    }];
-    modifiers().forEach(function (modifier) {
-      rows.push({
-        label: modifier.label,
-        modality: modifier.modality,
-        contribution: modifier.options.map(function (option) {
-          return option.label + " " + signed(option.offset);
+    const rows = [
+      {
+        label: spec.label + " (" + spec.unit + ")",
+        input: "x, the standardized individual feature",
+        mapping:
+          "z = (density − " + formatNumber(spec.population_mean, 1) + ") / " +
+          formatNumber(spec.population_sd, 1) + ", capped at ±" + FEATURE_LIMIT +
+          "; slider covers " + formatNumber(spec.min, 1) + "–" + formatNumber(spec.max, 1) + " " + spec.unit
+      },
+      {
+        label: state.site.organism_label,
+        input: "scenario, the organism indicator",
+        mapping: scenarios().map(function (scenario) {
+          return scenario.label + " → " + scenario.id + " (" + levels[scenario.id] + ")";
         }).join("; ")
-      });
-    });
+      }
+    ];
 
     rows.forEach(function (row) {
       const tr = document.createElement("tr");
       const name = document.createElement("th");
       name.scope = "row";
       name.textContent = row.label;
-      const modality = document.createElement("td");
-      modality.textContent = row.modality;
-      const contribution = document.createElement("td");
-      contribution.textContent = row.contribution;
+      const input = document.createElement("td");
+      input.textContent = row.input;
+      const mapping = document.createElement("td");
+      mapping.textContent = row.mapping;
       tr.appendChild(name);
-      tr.appendChild(modality);
-      tr.appendChild(contribution);
+      tr.appendChild(input);
+      tr.appendChild(mapping);
       body.appendChild(tr);
     });
   }
 
   function bindControls() {
-    el("use-profile").addEventListener("change", function (event) {
-      state.useProfile = event.target.checked;
+    el("use-indicator").addEventListener("change", function (event) {
+      state.useIndicator = event.target.checked;
       update();
     });
     el("use-scenario").addEventListener("change", function (event) {
       state.useScenario = event.target.checked;
       update();
     });
-    el("driver-slider").addEventListener("input", function (event) {
-      state.driver = parseFloat(event.target.value);
+    el("indicator-slider").addEventListener("input", function (event) {
+      state.density = parseFloat(event.target.value);
       update();
     });
     // The chart scales with its viewBox, so resizing needs no redraw.
@@ -277,24 +231,13 @@
     if (scrollToTop) window.scrollTo({ top: 0, behavior: "auto" });
   }
 
-  /* ---------- the presentation-only index ---------- */
+  /* ---------- the presentation-only feature mapping ---------- */
 
-  function clampIndex(value) {
-    return Math.max(-INDEX_LIMIT, Math.min(INDEX_LIMIT, value));
-  }
-
-  /** Offsets contributed by the categorical modifiers at their current values. */
-  function modifierOffset() {
-    return modifiers().reduce(function (total, modifier) {
-      const option = modifier.options[state.modifiers[modifier.id]];
-      return total + (option ? option.offset : 0);
-    }, 0);
-  }
-
-  /** Collapse the carrier profile into the standardized feature the model takes. */
-  function indexFor(driverValue) {
-    const spec = driver();
-    return clampIndex(spec.weight * (driverValue - spec.center) + modifierOffset());
+  /** Read a colonisation density as the standardized feature the model takes. */
+  function featureFor(density) {
+    const spec = indicator();
+    const z = (density - spec.population_mean) / spec.population_sd;
+    return Math.max(-FEATURE_LIMIT, Math.min(FEATURE_LIMIT, z));
   }
 
   /* ---------- formatting ---------- */
@@ -339,22 +282,22 @@
   }
 
   function patternLabel(pattern) {
-    if (pattern === "both") return "Profile + organism";
-    if (pattern === "x_only") return "Profile only";
+    if (pattern === "both") return "Density + organism";
+    if (pattern === "x_only") return "Density only";
     return "Organism only";
   }
 
   /* ---------- update cycle ---------- */
 
   function update() {
-    el("control-profile").classList.toggle("is-off", !state.useProfile);
+    el("control-indicator").classList.toggle("is-off", !state.useIndicator);
     el("control-scenario").classList.toggle("is-off", !state.useScenario);
 
-    el("driver-readout").textContent = formatNumber(state.driver, 1);
-    el("driver-slider").value = String(state.driver);
+    el("indicator-readout").textContent = formatNumber(state.density, 1);
+    el("indicator-slider").value = String(state.density);
 
-    const index = indexFor(state.driver);
-    el("index-value").textContent = signed(index);
+    const feature = featureFor(state.density);
+    el("feature-value").textContent = signed(feature);
 
     document.querySelectorAll("#scenario-choice button").forEach(function (button) {
       const active = button.dataset.scenario === state.scenario;
@@ -366,13 +309,13 @@
     const result = el("result");
     result.classList.remove("is-outbreak", "is-borderline", "is-safe");
 
-    if (!state.useProfile && !state.useScenario) {
+    if (!state.useIndicator && !state.useScenario) {
       el("form-error").hidden = false;
       el("result-value").textContent = "—";
       el("result-flag").textContent = "Waiting for input";
       el("result-meaning").textContent = "";
       el("meta-pattern").textContent = "—";
-      el("meta-index").textContent = "—";
+      el("meta-feature").textContent = "—";
       renderChart();
       return;
     }
@@ -381,7 +324,7 @@
     const scenario = state.useScenario ? state.scenario : null;
     const prediction = AmplifyModel.predict(
       state.model,
-      state.useProfile ? index : null,
+      state.useIndicator ? feature : null,
       scenario
     );
     const flag = band(prediction.value);
@@ -391,7 +334,7 @@
     el("result-flag").textContent = flag.label;
     el("result-meaning").textContent = flag.meaning;
     el("meta-pattern").textContent = patternLabel(prediction.pattern);
-    el("meta-index").textContent = state.useProfile ? signed(index) : "not supplied";
+    el("meta-feature").textContent = state.useIndicator ? signed(feature) : "not supplied";
 
     renderChart(prediction, flag);
   }
@@ -407,9 +350,9 @@
     bottom: 30
   };
 
-  /** Values of the continuous driver at which to evaluate the response curve. */
-  function driverGrid() {
-    const spec = driver();
+  /** Densities at which to evaluate the response curve. */
+  function densityGrid() {
+    const spec = indicator();
     const steps = 120;
     const values = [];
     for (let step = 0; step <= steps; step++) {
@@ -422,14 +365,14 @@
     const host = el("chart");
     if (!state.model) return;
 
-    const spec = driver();
+    const spec = indicator();
     const axisLabel = spec.label + " (" + spec.unit + ")";
 
-    if (!state.useProfile && !state.useScenario) {
+    if (!state.useIndicator && !state.useScenario) {
       host.innerHTML = svgShell(
         '<text class="empty-text" x="' + (CHART.width / 2) +
         '" y="' + (CHART.height / 2) + '" text-anchor="middle">' +
-        "Provide the carrier profile, the organism, or both to see the response.</text>"
+        "Provide an indicator to see the response.</text>"
       );
       el("chart-caption").textContent =
         "Predicted individual reproduction number across the " + spec.label.toLowerCase() + " range.";
@@ -437,11 +380,11 @@
     }
 
     const scenario = state.useScenario ? state.scenario : null;
-    const grid = driverGrid();
-    const constant = !state.useProfile;
+    const grid = densityGrid();
+    const constant = !state.useIndicator;
     const values = constant
       ? grid.map(function () { return prediction.value; })
-      : AmplifyModel.predictCurve(state.model, grid.map(indexFor), scenario);
+      : AmplifyModel.predictCurve(state.model, grid.map(featureFor), scenario);
 
     const maxValue = Math.max(1.35, Math.max.apply(null, values) * 1.12);
     const plotWidth = CHART.width - CHART.left - CHART.right;
@@ -491,7 +434,7 @@
       '" y="' + (oneY - 5) + '" text-anchor="end">R = 1</text>';
 
     // current position
-    const markerX = constant ? CHART.left + plotWidth / 2 : px(state.driver);
+    const markerX = constant ? CHART.left + plotWidth / 2 : px(state.density);
     const markerY = py(prediction.value);
     if (!constant) {
       parts += '<line class="marker-line" x1="' + markerX + '" y1="' + markerY +
@@ -507,7 +450,7 @@
       ? "Organism only: the estimate does not vary with " + spec.label.toLowerCase() +
         " (" + scenarioLabel + ")."
       : "Predicted individual reproduction number across the " + spec.label.toLowerCase() +
-        " range, holding the other profile inputs fixed (" + scenarioLabel + ").";
+        " range (" + scenarioLabel + ").";
   }
 
   function svgShell(inner) {
@@ -516,7 +459,7 @@
       inner + "</svg>";
   }
 
-  /** Whole-number ticks spanning the driver range, at most eight of them. */
+  /** Whole-number ticks spanning the slider range, at most eight of them. */
   function axisTicks(min, max) {
     const step = Math.max(1, Math.ceil((max - min) / 8));
     const ticks = [];

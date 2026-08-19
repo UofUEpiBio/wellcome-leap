@@ -8,7 +8,7 @@ evaluates it in the browser. No build step, no framework, no network calls.
 | `index.html` | Page structure and all narrative text. |
 | `styles.css` | Single stylesheet, light theme, no build step. |
 | `model.js` | The forward pass, mirroring `masked_count_net` in `R/torch_model.R`. |
-| `app.js` | Tabs, input handling, the index mapping, flagging, and the response curve. |
+| `app.js` | Tabs, input handling, the feature mapping, flagging, and the response curve. |
 | `model.json` | Exported weights and preprocessing constants. **Generated.** |
 | `site.json` | Editable presentation settings. |
 
@@ -56,28 +56,27 @@ are:
 Estimates above `outbreak` are flagged as outbreak potential, below
 `self_limiting` as self-limiting, and in between as borderline.
 
-## The carrier profile is a presentation layer
+## The two indicators are a presentation layer
 
 The fitted surrogate takes one standardized individual feature and the organism
-label, because that is what the simulation produces. The page presents that
-feature as a **transmissibility index** built from familiar clinical,
-microbiological, and omics inputs: `site.json` describes one continuous driver
-(colonisation density) and a set of categorical modifiers, each with an additive
-contribution, and `app.js` collapses them into the single value the model
-consumes, capped at ±3.
+label, because that is what the simulation produces. The page exposes exactly
+those two, one indicator each, so every estimate maps back to a row of the
+training data:
 
-Those contributions are illustrative — direction and rough ordering, not weights
-estimated from patient data — and the app says so on the **How it works** tab,
-where the whole mapping is tabulated from `site.json`. The organism labels are a
-relabelling of the same kind: the simulation's lower- and higher-transmission
-organisms are presented as an ESBL-producing *E. coli* and a carbapenem-resistant
-*K. pneumoniae*. Nothing in this layer touches `model.json`; change the labels,
-the items, or the weights freely without retraining. Keep the `id` of each entry
-in `scenarios` matching a key in the model's `preprocessor.scenario_levels`, or
-the export check in CI will fail.
+| Indicator in the app | Model input | Mapping |
+| --- | --- | --- |
+| Colonisation density, log₁₀ CFU/g stool | `x` | `z = (density - population_mean) / population_sd`, capped at ±3 |
+| Organism identified | `scenario` | organism label to `scenario` id, encoded by `preprocessor.scenario_levels` |
 
-## Deployment
+The slider range, the population mean and standard deviation behind the z-score,
+and the organism names all live in `site.json`; `app.js` applies them and the
+**How it works** tab tabulates the result, so the mapping is visible rather than
+implied. It is illustrative — the simulation's feature is standard normal and has
+no clinical units, and the organism names stand in for its lower- and
+higher-transmission scenarios — but it is a one-to-one relabelling, not a derived
+score.
 
-`.github/workflows/pages.yml` validates `model.json` and `site.json`, then
-publishes this directory to GitHub Pages on every push to `main` that touches
-`app/`. Pages must be enabled for the repository with **Source: GitHub Actions**.
+Nothing in this layer touches `model.json`: change the labels or the constants
+freely without retraining. Keep the `id` of each entry in `scenarios` matching a
+key in the model's `preprocessor.scenario_levels`, or the export check in CI will
+fail.
