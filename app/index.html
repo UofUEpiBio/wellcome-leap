@@ -51,7 +51,8 @@
             <strong>multimodal input with deliberate information loss</strong>: during training, each row
             randomly keeps both inputs, the individual feature alone, or the organism scenario alone. The
             model therefore stays usable when a modality is missing, instead of failing or silently
-            imputing it.
+            imputing it. The two organisms are weighted equally during training, so an estimate made from
+            one modality genuinely averages over the other.
           </p>
         </div>
       </li>
@@ -164,7 +165,8 @@
       <strong>outbreak potential</strong>: this individual is expected to more than replace themselves.
       Below <span data-threshold="self_limiting">0.9</span> we flag <strong>self-limiting</strong>.
       In between we flag <strong>borderline</strong> rather than pretending the model can separate the two —
-      the prototype's test error is of the same order as the threshold itself.
+      the prototype's test error is several times the width of that band, so a near-one estimate is a
+      question, not an answer.
     </p>
   </section>
 
@@ -215,9 +217,10 @@
         does not yet say anything about real organisms or real patients.
       </li>
       <li>
-        The two scenarios are very unbalanced in the training data, because a lower-transmission organism
-        produces far fewer infected agents. With the individual feature alone, the model leans toward the
-        higher-transmission regime it saw most.
+        The two organisms still contribute unequally to the training data, because the
+        higher-transmission one infects more agents. Training weights each scenario equally to compensate,
+        which is what lets an estimate from the individual feature alone sit between the two organisms
+        rather than collapsing onto the more common one — at the cost of some accuracy on that organism.
       </li>
       <li>
         The estimate is an expected count. Realized secondary infections are highly dispersed, so a single

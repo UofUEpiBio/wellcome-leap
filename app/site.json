@@ -23,12 +23,12 @@
     {
       "id": "lower",
       "label": "Lower-transmission organism",
-      "note": "Calibrated to a population R0 near 0.5."
+      "note": "Calibrated to a population R0 near 1.5."
     },
     {
       "id": "higher",
       "label": "Higher-transmission organism",
-      "note": "Calibrated to a population R0 near 4.0."
+      "note": "Calibrated to a population R0 near 3.0."
     }
   ]
 }
