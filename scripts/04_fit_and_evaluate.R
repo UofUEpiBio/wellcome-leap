@@ -12,15 +12,17 @@ if (!file.exists(manifest_path)) {
 }
 torch::torch_set_num_threads(min(8L, parallel::detectCores()))
 study <- load_simulation_batches(manifest_path)
-agents <- study$agents[study$agents$outcome_complete, ]
+agents <- filter_analysis_agents(study$agents)
 rm(study)
 gc()
 
 fit <- fit_masked_model(
   agents,
-  batch_size = 131072L,
-  max_epochs = 30L,
-  patience   = 5L
+  hidden_dim_1 = 32L,
+  hidden_dim_2 = 16L,
+  batch_size   = 2048L,
+  max_epochs   = 60L,
+  patience     = 15L
 )
 rmse <- evaluate_masked_rmse(fit)
 save_masked_model(fit)

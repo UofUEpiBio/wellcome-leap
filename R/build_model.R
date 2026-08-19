@@ -1,5 +1,9 @@
 #' Validate simulation configuration
 #'
+#' Also enforces the analysis invariant that an agent infected on
+#' `infection_cutoff_day` still has at least `min_transmission_days` left
+#' before `max_days`.
+#'
 #' @param config Named simulation-configuration list.
 #'
 #' @return The configuration invisibly; throws an error for invalid settings.
@@ -7,7 +11,8 @@ validate_simulation_config <- function(config) {
   required <- c(
     "n_agents", "prevalence", "contact_rate", "incubation_days",
     "recovery_rate", "x_mean", "x_sd", "beta_x", "alpha",
-    "delta_scenario", "max_days", "early_susceptible_fraction", "base_seed"
+    "delta_scenario", "max_days", "infection_cutoff_day",
+    "min_transmission_days", "early_susceptible_fraction", "base_seed"
   )
   missing <- setdiff(required, names(config))
   if (length(missing)) {
@@ -25,6 +30,20 @@ validate_simulation_config <- function(config) {
     if (config[[field]] <= 0 || config[[field]] >= 1) {
       stop(field, " must be strictly between 0 and 1.")
     }
+  }
+  if (config$min_transmission_days <= 0) {
+    stop("min_transmission_days must be positive.")
+  }
+  if (config$infection_cutoff_day < 0) {
+    stop("infection_cutoff_day must be nonnegative.")
+  }
+  if (config$max_days - config$infection_cutoff_day <
+      config$min_transmission_days) {
+    stop(
+      "max_days must exceed infection_cutoff_day by at least ",
+      "min_transmission_days so that every analyzed agent has a complete ",
+      "transmission window."
+    )
   }
   invisible(config)
 }
