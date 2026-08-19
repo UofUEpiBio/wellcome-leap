@@ -280,7 +280,6 @@ Use a run-level 70% training, 15% validation, and 15% test split. The ML Quarto 
 ```text
 wellcome-leap/
 ├── AGENTS.md
-├── FullProposal.md
 ├── PROTOTYPE_PLAN.md
 ├── README.qmd
 ├── README.md

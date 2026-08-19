@@ -496,8 +496,6 @@ institutions, flag thresholds, and scenario labels — lives in
 
 ## Repository documents
 
-- [FullProposal.md](FullProposal.md): grant narrative and scientific
-  context.
 - [PROTOTYPE_PLAN.md](PROTOTYPE_PLAN.md): modeling, calibration, and ML
   design.
 - [AGENTS.md](AGENTS.md): durable instructions for AI contributors.

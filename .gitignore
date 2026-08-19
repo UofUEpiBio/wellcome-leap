@@ -19,3 +19,6 @@ artifacts/*.csv
 # Quarto and test caches
 reports/_freeze/
 tests/testthat/_snaps/
+
+# Grant narrative (kept locally, not tracked)
+FullProposal.md
