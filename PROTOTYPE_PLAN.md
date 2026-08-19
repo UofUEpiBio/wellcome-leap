@@ -17,9 +17,9 @@ This prototype represents the between-host and population-level portions of Thru
 
 - R with `epiworldR` (installed version: 0.15.1.0).
 - `ModelSEIRCONN`, a fully connected stochastic SEIR model.
-- Population size: 5,000 agents per simulation.
+- Population size: 10,000 agents per simulation.
 - Two transmission scenarios, each representing a different antibiotic-resistant organism.
-- A calibration stage followed by 5,000 retained simulations per scenario (10,000 total).
+- A calibration stage followed by 1,000 retained simulations per scenario (2,000 total).
 - Reproducible, independent random-number streams and parallel execution.
 
 ### Agent-level heterogeneity
@@ -57,7 +57,7 @@ No custom C++ model is required for this functional form. The implementation pat
 
 The relevant source path has been verified: `ModelSEIRCONN` obtains the virus from the infectious source agent, and the virus callback evaluates its probability using the agent that owns that virus. Thus, the callback reads \(X_i\) from the transmitter, not from the susceptible recipient.
 
-A temporary in-memory feasibility experiment confirmed that this route produces both a positive \(X\) effect and a scenario shift in individual secondary infections. Production calibration under the standard-normal feature targets mean early \(R_i\) values near 1.5 and 2.0.
+A temporary in-memory feasibility experiment confirmed that this route produces both a positive \(X\) effect and a scenario shift in individual secondary infections. Production calibration under the standard-normal feature targets mean early \(R_i\) values near 0.5 and 4.0.
 
 Custom C++ `epiworld` should be reserved as a fallback if the project later requires an arbitrary non-logistic function, an interaction involving both source and recipient features, time-varying agent features, or other dynamics not exposed by the R callback factories.
 
@@ -69,9 +69,9 @@ Provisional values for an initial smoke test, subject to approval:
 
 | Parameter | Provisional value | Rationale |
 |---|---:|---|
-| Population | 5,000 | Requested |
-| Initial infected/exposed seeds | 1% (50 agents) | Reduces early stochastic extinction during pipeline testing |
-| Mean incubation period | 3 days | Simple toy-model value |
+| Population | 10,000 | Requested |
+| Initial infected/exposed seeds | 5 agents | Keeps the early epidemic close to the branching-process regime |
+| Mean incubation period | 7 days | Simple toy-model value |
 | Daily recovery probability | 0.20 | Mean infectious duration of about 5 days |
 | Simulation horizon | 60 days | Requested fixed horizon; active individual outcomes are censored |
 | \(X\) distribution | Standard normal | Requested |
@@ -99,14 +99,14 @@ The population-level calibration target also needs a precise definition. The rec
 
 Run the two organism scenarios separately, with one transmissible process in each run:
 
-- Scenario 1: lower-transmission antibiotic-resistant organism, target early-epidemic \(R_0 \approx 1.5\).
-- Scenario 2: higher-transmission antibiotic-resistant organism, target early-epidemic \(R_0 \approx 2.0\).
+- Scenario 1: lower-transmission antibiotic-resistant organism, target early-epidemic \(R_0 \approx 0.5\).
+- Scenario 2: higher-transmission antibiotic-resistant organism, target early-epidemic \(R_0 \approx 4.0\).
 
 The organism/scenario label and agent-level \(X\) will determine the transmission probability. Separate runs avoid competition between two organisms for the same susceptible population and produce a clean supervised-learning dataset.
 
 ### Redrawing agents
 
-The recommended design redraws the 5,000 \(X_i\) values for every replicate. This makes the replicates independent population realizations and gives the ML model broad coverage of the continuous feature. A secondary sensitivity analysis can hold one population fixed across replicates to isolate epidemic stochasticity from population-composition variability.
+The recommended design redraws the 10,000 \(X_i\) values for every replicate. This makes the replicates independent population realizations and gives the ML model broad coverage of the continuous feature. A secondary sensitivity analysis can hold one population fixed across replicates to isolate epidemic stochasticity from population-composition variability.
 
 ### Initial infections
 
@@ -135,11 +135,11 @@ Minimum long-form schema:
 | `final_epidemic_size` | Replicate-level epidemic size |
 | `extinct_early` | Indicator of stochastic early extinction |
 
-We will also retain a run-level summary table and, optionally, the raw transmission-edge table. Raw state histories need not be retained for all 10,000 runs unless they are required for a later analysis.
+We will also retain a run-level summary table and, optionally, the raw transmission-edge table. Raw state histories need not be retained for all 2,000 runs unless they are required for a later analysis.
 
 ## 5. Calibration strategy
 
-Calibration will occur before the 5,000-run-per-scenario production stage.
+Calibration will occur before the 1,000-run-per-scenario production stage.
 
 1. Fix incubation, recovery, contact rate, initial seeding, \(\beta\), and the definition of the early epidemic window.
 2. Obtain analytic starting values for \(\alpha\) and \(\delta\). Early in a fully susceptible epidemic, the approximation
@@ -155,10 +155,10 @@ Calibration will occur before the 5,000-run-per-scenario production stage.
    = \int_{-\infty}^{\infty}\operatorname{logit}^{-1}(a_s+\beta x)\phi(x)\,dx,
    \]
 
-   where \(\phi\) is the standard-normal density, \(a_1=\alpha\), \(a_2=\alpha+\delta\), \(C\) is the daily contact rate, and \(\gamma\) is the daily recovery probability. With \(C=2\), \(\gamma=0.2\), and \(\beta=1\), numerical integration gives starting values \(\alpha\approx-2.048\) and \(\delta\approx0.398\) for targets 1.5 and 2.0. These are starting values only because the simulator is discrete, stochastic, and finite.
+   where \(\phi\) is the standard-normal density, \(a_1=\alpha\), \(a_2=\alpha+\delta\), \(C\) is the daily contact rate, and \(\gamma\) is the daily recovery probability. With \(C=4\), \(\gamma=0.2\), and \(\beta=1\), numerical integration gives starting values \(\alpha\approx-4.125\) and \(\delta\approx2.475\) for targets 0.5 and 4.0. These are starting values only because the simulator is discrete, stochastic, and finite.
 3. For candidate values around that starting point, run a moderate batch of simulations using common random numbers across candidates to reduce Monte Carlo noise.
 4. Estimate early-epidemic \(R_0\) from `get_reproductive_number()` among agents infected before a specified susceptible-depletion threshold (recommended: while at least 90% of the population remains susceptible).
-5. Use stochastic root finding or a bounded grid/refinement search to approach each target. Exact equality is not required; the aim is clear separation around \(R_0\approx1.5\) and \(R_0\approx2.0\), with Monte Carlo intervals reported.
+5. Use stochastic root finding or a bounded grid/refinement search to approach each target. Exact equality is not required; the aim is clear separation around \(R_0\approx0.5\) and \(R_0\approx4.0\), with Monte Carlo intervals reported.
 6. Confirm that \(\beta>0\) and \(\delta>0\), so transmission increases with \(X\) and is higher in scenario 2 while all other epidemiological parameters remain fixed.
 7. Validate the chosen parameters in a fresh simulation batch not used during calibration.
 8. Freeze the calibrated configuration before production runs.
@@ -167,7 +167,7 @@ Calibration will occur before the 5,000-run-per-scenario production stage.
 
 ### Phase A: executable smoke test
 
-- Construct one scenario with 5,000 agents.
+- Construct one scenario with 10,000 agents.
 - Verify the distribution of \(X\) and calculated probabilities.
 - Run a small number of replicates.
 - Confirm transmission edges link valid sources and targets.
@@ -183,7 +183,7 @@ Calibration will occur before the 5,000-run-per-scenario production stage.
 
 ### Phase C: production simulation
 
-- Run 5,000 independent replicates per scenario.
+- Run 1,000 independent replicates per scenario.
 - Run each epidemic for the fixed 60-day horizon and flag agents still exposed or infectious as right-censored rather than treating their current counts as final outcomes.
 - Parallelize at the replicate or batch level with deterministic random-number streams.
 - Write results in batches to avoid holding all raw histories in memory.
@@ -201,7 +201,7 @@ Calibration will occur before the 5,000-run-per-scenario production stage.
 
 ### Phase E: Quarto simulation report
 
-- Summarize the 5,000-replicate-per-scenario production experiment from `reports/simulation_experiment.qmd` rather than running a separate ad hoc inspection sample.
+- Summarize the 1,000-replicate-per-scenario production experiment from `reports/simulation_experiment.qmd` rather than running a separate ad hoc inspection sample.
 - Render with `format: gfm` and commit the resulting Markdown and figure assets, but not the underlying simulated agent data.
 - Report the number of infected agents, mean, standard deviation, median, interquartile range, selected quantiles, and zero-secondary-infection fraction by scenario.
 - Plot the overall distribution of individual \(R_i\) values by scenario and summarize achieved early-epidemic reproduction numbers.
@@ -284,6 +284,7 @@ wellcome-leap/
 │   └── predict.R
 ├── scripts/
 │   ├── 00_install_dependencies.R
+│   ├── 00_clean_generated.R
 │   ├── 01_smoke_test.R
 │   ├── 02_calibrate.R
 │   ├── 03_run_production.R
@@ -305,7 +306,7 @@ Generated simulation data should be excluded from version control unless a small
 1. Reproducible R environment and configuration.
 2. Tested `ModelSEIRCONN` builder with continuous agent-specific transmissibility.
 3. Calibration script and calibration report.
-4. Parallel simulation pipeline for 10,000 retained runs.
+4. Parallel simulation pipeline for 2,000 retained runs.
 5. Agent-level, run-level, and optional edge-level datasets with data dictionaries.
 6. Missingness-augmented statistical and ML models.
 7. Evaluation report with simulation diagnostics, masking-stratified predictive performance, and limitations.
@@ -313,31 +314,31 @@ Generated simulation data should be excluded from version control unless a small
 
 ## 10. Implementation gates
 
-The scientific design decisions in Gate 1 have been resolved. Implementation can begin after confirmation of the remaining operational question about the production compute environment.
+The scientific design and local compute environment have been resolved, and the current prototype has completed the implementation gates below.
 
 ### Gate 1: scientific design — complete
 
 - Two scenarios represent two different antibiotic-resistant organisms.
-- Prioritize approximate \(R_0\) targets of 1.5 and 2.0 and create the difference through the scenario-specific probability-of-transmission function.
+- Prioritize approximate \(R_0\) targets of 0.5 and 4.0 and create the difference through the scenario-specific probability-of-transmission function.
 - Use individual realized secondary-case count \(R_i\), as returned in the `rt` column of `get_reproductive_number()`.
 - Retain all infected agents, including zero-secondary-case agents.
-- Use the provisional incubation, recovery, seeding, and horizon values for the toy prototype.
+- Use the configured incubation, recovery, five-agent seeding, and 60-day horizon values for the toy prototype.
 - Use one compact missingness-augmented R `torch` model that supports both features, \(X\) only, or scenario only.
 
-### Gate 2: calibrated pilot
+### Gate 2: calibrated pilot — complete
 
 - Achieved targets within tolerance.
 - No invalid transmission probabilities.
 - Extraction identities and reproducibility tests pass.
 - Runtime and output size projections are acceptable.
 
-### Gate 3: production run
+### Gate 3: production run — complete
 
 - Freeze configuration and package versions.
-- Execute 5,000 simulations per scenario.
+- Execute 1,000 simulations per scenario.
 - Audit completed replicate IDs and rerun only missing/failed batches.
 
-### Gate 4: ML analysis
+### Gate 4: ML analysis — complete
 
 - Freeze train/validation/test run IDs before fitting.
 - Apply masking only after splitting.
@@ -350,7 +351,7 @@ The prototype production experiment runs locally using up to eight CPU workers. 
 ## 12. Approved working design
 
 - Two separate scenarios representing lower- and higher-transmission antibiotic-resistant organisms.
-- Native logit transmission, \(p_{is}=\operatorname{logit}^{-1}(\alpha+\beta X_i+\delta S_s)\), calibrated to produce clearly separated empirical early-epidemic reproduction numbers near 1.5 and 2.0.
+- Native logit transmission, \(p_{is}=\operatorname{logit}^{-1}(\alpha+\beta X_i+\delta S_s)\), calibrated to produce clearly separated empirical early-epidemic reproduction numbers near 0.5 and 4.0.
 - \(R_i\), obtained from `get_reproductive_number()`, as the individual target.
 - All infected agents retained, including zeros.
 - Redraw \(X\) in each replicate unless later changed.

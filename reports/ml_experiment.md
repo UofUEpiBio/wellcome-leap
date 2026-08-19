@@ -8,12 +8,12 @@ error (RMSE) is the primary predictive-performance statistic.
 
 ## Production simulation data
 
-The model uses completed individual outcomes from all 5,000 production
-simulations per organism scenario. Each simulation contains 5,000 agents
-observed for 60 days. Recovered infected agents enter the individual
-reproduction-number dataset, including agents with zero secondary
-infections; agents still exposed or infectious at the horizon are
-censored.
+The model uses completed individual outcomes from all 1,000 production
+simulations per organism scenario. Each simulation contains 10,000
+agents observed for 60 days. Recovered infected agents enter the
+individual reproduction-number dataset, including agents with zero
+secondary infections; agents still exposed or infectious at the horizon
+are censored.
 
 ``` r
 library(torch)
@@ -32,8 +32,8 @@ study <- load_simulation_batches(
   root_dir       = ".."
 )
 run_counts <- table(study$runs$scenario)
-if (!identical(as.integer(run_counts[c("lower", "higher")]), c(5000L, 5000L))) {
-  stop("The production manifest must contain 5,000 runs per scenario.")
+if (!identical(as.integer(run_counts[c("lower", "higher")]), c(1000L, 1000L))) {
+  stop("The production manifest must contain 1,000 runs per scenario.")
 }
 agents <- study$agents[study$agents$outcome_complete, ]
 rm(study)
@@ -79,9 +79,9 @@ knitr::kable(split_summary)
 
 | partition  | runs | infected_agents | lower_agents | higher_agents |
 |:-----------|-----:|----------------:|-------------:|--------------:|
-| train      | 7000 |        20673045 |      6945381 |      13727664 |
-| validation | 1500 |         4429559 |      1489257 |       2940302 |
-| test       | 1500 |         4433157 |      1487802 |       2945355 |
+| train      | 1400 |         6570615 |         6087 |       6564528 |
+| validation |  300 |         1404561 |         1329 |       1403232 |
+| test       |  300 |         1414277 |         1341 |       1412936 |
 
 During training, torch-native modality dropout independently assigns
 each observation one of three equally likely states: both inputs
@@ -98,7 +98,7 @@ softplus output trained with Poisson negative log-likelihood.
 fit$best_epoch
 ```
 
-    [1] 20
+    [1] 11
 
 ``` r
 knitr::kable(head(fit$history, 5), digits = 4)
@@ -106,11 +106,11 @@ knitr::kable(head(fit$history, 5), digits = 4)
 
 | epoch | training_loss | validation_loss |
 |------:|--------------:|----------------:|
-|     1 |        0.8455 |          0.8294 |
-|     2 |        0.8297 |          0.8294 |
-|     3 |        0.8292 |          0.8294 |
-|     4 |        0.8293 |          0.8294 |
-|     5 |        0.8293 |          0.8294 |
+|     1 |        0.9195 |          0.8891 |
+|     2 |        0.8876 |          0.8886 |
+|     3 |        0.8884 |          0.8886 |
+|     4 |        0.8881 |          0.8887 |
+|     5 |        0.8883 |          0.8888 |
 
 ``` r
 knitr::kable(tail(fit$history, 5), digits = 4)
@@ -118,11 +118,11 @@ knitr::kable(tail(fit$history, 5), digits = 4)
 
 |     | epoch | training_loss | validation_loss |
 |:----|------:|--------------:|----------------:|
-| 16  |    16 |        0.8294 |          0.8293 |
-| 17  |    17 |        0.8295 |          0.8294 |
-| 18  |    18 |        0.8295 |          0.8293 |
-| 19  |    19 |        0.8293 |          0.8293 |
-| 20  |    20 |        0.8294 |          0.8292 |
+| 12  |    12 |        0.8880 |          0.8889 |
+| 13  |    13 |        0.8883 |          0.8886 |
+| 14  |    14 |        0.8881 |          0.8886 |
+| 15  |    15 |        0.8881 |          0.8886 |
+| 16  |    16 |        0.8883 |          0.8886 |
 
 ``` r
 matplot(
@@ -157,15 +157,15 @@ knitr::kable(rmse, digits = 3)
 
 | pattern       | scenario |       n |  rmse |
 |:--------------|:---------|--------:|------:|
-| both          | overall  | 4433157 | 1.616 |
-| both          | higher   | 2945355 | 1.608 |
-| both          | lower    | 1487802 | 1.630 |
-| x_only        | overall  | 4433157 | 1.618 |
-| x_only        | higher   | 2945355 | 1.610 |
-| x_only        | lower    | 1487802 | 1.633 |
-| scenario_only | overall  | 4433157 | 1.786 |
-| scenario_only | higher   | 2945355 | 1.758 |
-| scenario_only | lower    | 1487802 | 1.840 |
+| both          | overall  | 1414277 | 2.326 |
+| both          | higher   | 1412936 | 2.327 |
+| both          | lower    |    1341 | 1.040 |
+| x_only        | overall  | 1414277 | 2.326 |
+| x_only        | higher   | 1412936 | 2.327 |
+| x_only        | lower    |    1341 | 1.171 |
+| scenario_only | overall  | 1414277 | 2.398 |
+| scenario_only | higher   | 1412936 | 2.399 |
+| scenario_only | lower    |    1341 | 1.119 |
 
 The overall comparison requested for the prediction interface is:
 
@@ -177,9 +177,9 @@ knitr::kable(overall_rmse, digits = 3)
 
 | pattern       |       n |  rmse |
 |:--------------|--------:|------:|
-| both          | 4433157 | 1.616 |
-| x_only        | 4433157 | 1.618 |
-| scenario_only | 4433157 | 1.786 |
+| both          | 1414277 | 2.326 |
+| x_only        | 1414277 | 2.326 |
+| scenario_only | 1414277 | 2.398 |
 
 Differences between the three RMSE values quantify the predictive cost
 of masking each input. RMSE is aligned with conditional-mean prediction

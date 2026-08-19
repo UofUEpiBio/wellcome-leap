@@ -112,7 +112,7 @@ run_simulation_study <- function(
 #' @export
 run_simulation_batches <- function(
     config,
-    n_reps         = 5000L,
+    n_reps         = 1000L,
     batch_size     = 100L,
     workers        = 1L,
     output_dir     = "data/derived/production",

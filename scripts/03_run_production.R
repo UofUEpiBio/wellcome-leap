@@ -4,7 +4,7 @@ source("R/extract_outcomes.R")
 source("R/simulate.R")
 
 args <- commandArgs(trailingOnly = TRUE)
-n_reps <- if (length(args) >= 1L) as.integer(args[[1]]) else 5000L
+n_reps <- if (length(args) >= 1L) as.integer(args[[1]]) else 1000L
 workers <- if (length(args) >= 2L) {
   as.integer(args[[2]])
 } else {

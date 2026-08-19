@@ -2,8 +2,8 @@
 
 
 This report summarizes the full production study for the two
-antibiotic-resistant organism scenarios. It uses 5,000 independent
-simulations per scenario with 5,000 agents per simulation and a 60-day
+antibiotic-resistant organism scenarios. It uses 1,000 independent
+simulations per scenario with 10,000 agents per simulation and a 60-day
 horizon. Each simulation draws the agent feature from a standard normal
 distribution.
 
@@ -21,18 +21,18 @@ study <- load_simulation_batches(
   root_dir       = ".."
 )
 run_counts <- table(study$runs$scenario)
-if (!identical(as.integer(run_counts[c("lower", "higher")]), c(5000L, 5000L))) {
-  stop("The production manifest must contain 5,000 runs per scenario.")
+if (!identical(as.integer(run_counts[c("lower", "higher")]), c(1000L, 1000L))) {
+  stop("The production manifest must contain 1,000 runs per scenario.")
 }
 knitr::kable(data.frame(scenario = names(run_counts), runs = as.integer(run_counts)))
 ```
 
 | scenario | runs |
 |:---------|-----:|
-| higher   | 5000 |
-| lower    | 5000 |
+| higher   | 1000 |
+| lower    | 1000 |
 
-All populations still had active transmission at the fixed 60-day
+Some populations still had active transmission at the fixed 60-day
 horizon. Completeness is therefore assessed per infected agent:
 recovered agents have a final individual reproduction count, while
 agents still exposed or infectious are censored. The individual
@@ -46,18 +46,18 @@ with(study$runs, table(scenario, outcome_complete))
 ```
 
             outcome_complete
-    scenario FALSE
-      higher  5000
-      lower   5000
+    scenario FALSE TRUE
+      higher  1000    0
+      lower     98  902
 
 ``` r
 with(study$agents, table(scenario, outcome_complete))
 ```
 
             outcome_complete
-    scenario    FALSE     TRUE
-      higher  1308176 19613321
-      lower   2215598  9922440
+    scenario   FALSE    TRUE
+      higher  601280 9380696
+      lower      218    8757
 
 ``` r
 analysis_agents <- study$agents[study$agents$outcome_complete, ]
@@ -104,8 +104,8 @@ knitr::kable(ri_summary, digits = 3)
 
 | scenario | infected_agents | mean_ri | sd_ri | p05 | p25 | median | p75 | p95 | zero_fraction |
 |:---------|----------------:|--------:|------:|----:|----:|-------:|----:|----:|--------------:|
-| higher   |        19613321 |   1.025 | 1.755 |   0 |   0 |      0 |   1 |   4 |         0.539 |
-| lower    |         9922440 |   1.088 | 1.841 |   0 |   0 |      0 |   1 |   4 |         0.523 |
+| higher   |         9380696 |   1.058 | 2.402 |   0 |   0 |      0 |   1 |   5 |         0.636 |
+| lower    |            8757 |   0.449 | 1.058 |   0 |   0 |      0 |   1 |   2 |         0.740 |
 
 ``` r
 boxplot(
@@ -177,8 +177,8 @@ knitr::kable(pooled_early, digits = 3)
 
 | scenario | mean_ri |    se | infected_agents |
 |:---------|--------:|------:|----------------:|
-| higher   |   1.997 | 0.002 |         2354700 |
-| lower    |   1.514 | 0.002 |         2411608 |
+| higher   |   4.039 | 0.005 |          884139 |
+| lower    |   0.449 | 0.011 |            8757 |
 
 ``` r
 knitr::kable(run_early, digits = 3)
@@ -186,8 +186,8 @@ knitr::kable(run_early, digits = 3)
 
 | scenario | mean_run_ri | sd_run_ri | runs |
 |:---------|------------:|----------:|-----:|
-| higher   |       1.998 |     0.110 | 5000 |
-| lower    |       1.517 |     0.098 | 5000 |
+| higher   |       4.046 |     0.136 | 1000 |
+| lower    |       0.330 |     0.257 | 1000 |
 
 These values vary around the targets because this is a finite stochastic
 model. The calibration script refines the scenario intercepts before the

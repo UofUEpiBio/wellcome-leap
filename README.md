@@ -23,7 +23,7 @@ normal and `S_s` distinguishes the organism scenarios.
 
 ``` mermaid
 flowchart LR
-  A["Calibrated SEIR parameters"] --> B["Simulate 5,000 populations per scenario"]
+  A["Calibrated SEIR parameters"] --> B["Simulate 1,000 populations per scenario"]
   B --> C["Agent outcomes: X, scenario, and individual Ri"]
   C --> D["70/15/15 run-level split"]
   D --> E["Random modality dropout during training"]
@@ -62,11 +62,18 @@ workflow is:
 ``` sh
 Rscript scripts/01_smoke_test.R
 Rscript scripts/02_calibrate.R 200 8
-Rscript scripts/03_run_production.R 5000 8 100
+Rscript scripts/03_run_production.R 1000 8 100
 ```
 
 Generated simulation data are written under ignored `data/derived/`
 paths.
+
+To discard all generated simulation data, fitted model artifacts, and
+Quarto caches before a fresh run:
+
+``` sh
+Rscript scripts/00_clean_generated.R
+```
 
 ## ML experiment
 
@@ -81,12 +88,13 @@ quarto render reports/ml_experiment.qmd --to gfm
 
 ## Prediction examples
 
-This example simulates scenario 1 (`lower`) with 5,000 agents whose
-feature is fixed at `X = 0.1`. Fixing `X` gives enough infected
-observations at exactly that value to calculate an empirical individual
-reproduction count. The example uses `epiworldR::run_multiple()` for 100
-replicate populations and up to eight threads. It removes the
-`source = -1` pseudo-source row before calculating the empirical value.
+This example simulates scenario 1 (`lower`) twice with 10,000 agents
+whose feature is fixed first at `X = -2` and then at `X = 2`. Fixing
+each population’s feature gives enough infected observations at those
+exact values to calculate empirical individual reproduction counts. Each
+example uses `epiworldR::run_multiple()` for 100 replicate populations
+and up to eight threads. It removes the `source = -1` pseudo-source row
+before calculating each empirical value.
 
 ``` r
 library(torch)
@@ -99,29 +107,37 @@ source("R/fit_models.R")
 source("R/predict.R")
 
 config <- readRDS("data/derived/calibration.rds")$config
-x_value <- 0.1
+x_values <- c(-2, 2)
 scenario_value <- "lower"
-scenario_1 <- build_seirconn_model(
-  config,
-  scenario = scenario_value,
-  x        = rep(x_value, config$n_agents)
-)
-saver <- epiworldR::make_saver("reproductive")
-epiworldR::run_multiple(
-  scenario_1$model,
-  ndays    = config$max_days,
-  nsims    = 100L,
-  seed     = config$base_seed,
-  saver    = saver,
-  verbose  = FALSE,
-  nthreads = min(8L, parallel::detectCores())
-)
-multiple_results <- epiworldR::run_multiple_get_results(
-  scenario_1$model,
-  nthreads = min(8L, parallel::detectCores())
-)
-individual_rt <- exclude_seed_pseudo_source(multiple_results$reproductive)
-empirical_mean_rt <- mean(individual_rt$rt)
+controlled_results <- lapply(seq_along(x_values), function(index) {
+  x_value <- x_values[[index]]
+  scenario_1 <- build_seirconn_model(
+    config,
+    scenario = scenario_value,
+    x        = rep(x_value, config$n_agents)
+  )
+  saver <- epiworldR::make_saver("reproductive")
+  epiworldR::run_multiple(
+    scenario_1$model,
+    ndays    = config$max_days,
+    nsims    = 100L,
+    seed     = config$base_seed + index - 1L,
+    saver    = saver,
+    verbose  = FALSE,
+    nthreads = min(8L, parallel::detectCores())
+  )
+  multiple_results <- epiworldR::run_multiple_get_results(
+    scenario_1$model,
+    nthreads = min(8L, parallel::detectCores())
+  )
+  individual_rt <- exclude_seed_pseudo_source(multiple_results$reproductive)
+  data.frame(
+    x                     = x_value,
+    infected_observations = nrow(individual_rt),
+    empirical_mean_ri     = mean(individual_rt$rt)
+  )
+})
+controlled_summary <- do.call(rbind, controlled_results)
 
 model <- load_masked_model(
   weights_path  = "artifacts/masked_model.pt",
@@ -139,35 +155,45 @@ column is repeated to make each prediction directly comparable with the
 controlled simulation.
 
 ``` r
-prediction_table <- rbind(
-  predict_secondary_cases(
-    model,
-    x = x_value
-  ),
-  predict_secondary_cases(
-    model,
-    scenario = scenario_value
-  ),
-  predict_secondary_cases(
-    model,
-    x        = x_value,
-    scenario = scenario_value
+prediction_table <- do.call(rbind, lapply(x_values, function(x_value) {
+  rbind(
+    predict_secondary_cases(
+      model,
+      x = x_value
+    ),
+    predict_secondary_cases(
+      model,
+      scenario = scenario_value
+    ),
+    predict_secondary_cases(
+      model,
+      x        = x_value,
+      scenario = scenario_value
+    )
   )
+}))
+prediction_table$requested_x <- rep(x_values, each = 3L)
+prediction_table <- merge(
+  prediction_table,
+  controlled_summary,
+  by.x = "requested_x",
+  by.y = "x",
+  sort = FALSE
 )
-prediction_table$infected_observations <- nrow(individual_rt)
-prediction_table$empirical_mean_rt <- empirical_mean_rt
 prediction_table <- prediction_table[c(
+  "requested_x",
   "observation_pattern",
   "x",
   "scenario",
   "infected_observations",
-  "empirical_mean_rt",
+  "empirical_mean_ri",
   "predicted_secondary_cases"
 )]
 knitr::kable(
   prediction_table,
   digits = 3,
   col.names = c(
+    "Simulated X",
     "Model inputs",
     "X",
     "Scenario",
@@ -178,11 +204,14 @@ knitr::kable(
 )
 ```
 
-| Model inputs | X | Scenario | Infected observations | Empirical mean Ri at day 60 | Predicted mean Ri |
-|:---|---:|:---|---:|---:|---:|
-| x_only | 0.1 | NA | 137930 | 0.964 | 0.916 |
-| scenario_only | NA | lower | 137930 | 0.964 | 1.091 |
-| both | 0.1 | lower | 137930 | 0.964 | 0.917 |
+| Simulated X | Model inputs | X | Scenario | Infected observations | Empirical mean Ri at day 60 | Predicted mean Ri |
+|---:|:---|---:|:---|---:|---:|---:|
+| -2 | x_only | -2 | NA | 518 | 0.035 | 0.178 |
+| -2 | scenario_only | NA | lower | 518 | 0.035 | 0.710 |
+| -2 | both | -2 | lower | 518 | 0.035 | 0.118 |
+| 2 | x_only | 2 | NA | 40335 | 0.988 | 2.312 |
+| 2 | scenario_only | NA | lower | 40335 | 0.988 | 0.710 |
+| 2 | both | 2 | lower | 40335 | 0.988 | 2.061 |
 
 ## Repository documents
 
