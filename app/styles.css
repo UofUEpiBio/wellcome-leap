@@ -581,6 +581,36 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
   color: var(--text-faint);
 }
 
+/* ---------- architecture diagram ---------- */
+
+.diagram { margin: 1.3rem 0 0; }
+
+.diagram-link { display: block; cursor: zoom-in; }
+.diagram-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.diagram img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #fff;
+}
+
+.diagram figcaption {
+  margin-top: 0.8rem;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+}
+
+.diagram .diagram-note {
+  margin-top: 0.6rem;
+  padding: 0.8rem 0.9rem;
+  background: var(--surface-sunken);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+}
+
 /* ---------- input mapping table ---------- */
 
 .table-wrap { margin-top: 1.2rem; overflow-x: auto; }

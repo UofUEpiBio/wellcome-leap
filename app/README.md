@@ -11,6 +11,7 @@ evaluates it in the browser. No build step, no framework, no network calls.
 | `app.js` | Tabs, input handling, the feature mapping, flagging, and the response curve. |
 | `model.json` | Exported weights and preprocessing constants. **Generated.** |
 | `site.json` | Editable presentation settings. |
+| `ml-diagram.jpeg` | Architecture figure shown on the **How it works** tab. |
 
 ## Running it locally
 
@@ -38,16 +39,29 @@ retraining; nothing else in the app needs to change.
 
 The page has two tabs, driven entirely by `app.js`: **Estimator**, which opens
 with a short statement of what the tool is and then the tool itself, and
-**How it works**, which carries the three-piece description, the indicator
-mapping, and the scope of the full version. The tab is reflected in the URL
-fragment (`#estimator`, `#method`), so either view can be linked directly.
+**How it works**, which opens with the architecture figure and then carries the
+three-piece description, the indicator mapping, and the scope of the full
+version. The tab is reflected in the URL fragment (`#estimator`, `#method`), so
+either view can be linked directly.
+
+`ml-diagram.jpeg` is a compressed copy of `fig/ml-diagram.jpeg`, kept inside
+`app/` because the Pages workflow publishes this directory alone. Regenerate it
+after editing the source figure:
+
+```sh
+sips -s format jpeg -s formatOptions 72 --resampleWidth 1400 \
+  fig/ml-diagram.jpeg --out app/ml-diagram.jpeg
+```
+
+Keep the `width` and `height` attributes on the `<img>` in step with whatever
+that writes, so the page reserves the right space before the image loads.
 
 ## Editing the wording
 
 `site.json` holds the app name, tagline, attribution line, partner
-institutions, repository link, flag thresholds, organism labels, and the carrier
-profile. Edit it and redeploy; no code changes are required. The flag thresholds
-are:
+institutions, repository link, flag thresholds, organism labels, and the
+indicator mapping. Edit it and redeploy; no code changes are required. The flag
+thresholds are:
 
 ```json
 "thresholds": { "outbreak": 1.1, "self_limiting": 0.9 }
