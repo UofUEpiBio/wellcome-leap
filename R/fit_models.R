@@ -58,12 +58,35 @@ poisson_loss_matrix <- function(
   total / length(y)
 }
 
+#' Scenario-balancing observation weights
+#'
+#' The analysis window admits very unequal numbers of agents per organism
+#' scenario, so an unweighted likelihood lets the larger scenario decide what
+#' the network predicts when the scenario is hidden. Balancing weights give
+#' each scenario the same total weight, which makes an `X`-only prediction an
+#' average over equally likely organisms instead of an average pinned to the
+#' more numerous one.
+#'
+#' @param scenario Character vector with one scenario label per observation.
+#'
+#' @return A numeric vector of positive weights whose mean is one.
+#' @export
+scenario_balance_weights <- function(scenario) {
+  if (!length(scenario)) stop("scenario must contain at least one label.")
+  counts <- table(as.character(scenario))
+  weights <- 1 / as.numeric(counts[as.character(scenario)])
+  if (anyNA(weights)) stop("scenario must not contain missing labels.")
+  weights / mean(weights)
+}
+
 #' Train the masked R torch count model
 #'
-#' The early-stopping criterion averages the validation Poisson loss over
-#' scenarios before averaging over modality states. Scenarios contribute very
-#' unequal agent counts, so a pooled criterion would let the more numerous
-#' scenario decide when training stops.
+#' The training likelihood and the early-stopping criterion both treat the two
+#' scenarios as equally important. Scenarios contribute very unequal agent
+#' counts, so a pooled objective would let the more numerous scenario decide
+#' both the fitted rates and the stopping epoch. Training rows are therefore
+#' weighted by [scenario_balance_weights()], and the validation Poisson loss is
+#' averaged over scenarios before it is averaged over modality states.
 #'
 #' @param training_data Agent-level training data.
 #' @param validation_data Agent-level validation data.
@@ -77,6 +100,8 @@ poisson_loss_matrix <- function(
 #' @param seed Integer R and torch seed.
 #' @param modality_dropout_probabilities Named probabilities for retaining both
 #'   modalities, only `X`, or only scenario during each training observation.
+#' @param balance_scenarios Whether to weight training rows so that every
+#'   scenario contributes the same total weight to the likelihood.
 #'
 #' @return A list containing the best model, training history, and architecture.
 #' @export
@@ -91,13 +116,19 @@ train_masked_torch <- function(
     max_epochs                     = 100L,
     patience                       = 10L,
     seed                           = 20260818L,
-    modality_dropout_probabilities = default_modality_dropout_probabilities()
+    modality_dropout_probabilities = default_modality_dropout_probabilities(),
+    balance_scenarios              = TRUE
 ) {
   set.seed(seed)
   torch::torch_manual_seed(seed)
   training <- list(
     x = make_masked_matrix(training_data, "both", preprocessor),
-    y = as.numeric(training_data$secondary_cases)
+    y = as.numeric(training_data$secondary_cases),
+    weight = if (balance_scenarios) {
+      scenario_balance_weights(training_data$scenario)
+    } else {
+      rep(1, nrow(training_data))
+    }
   )
   model <- create_masked_count_model(
     input_dim = ncol(training$x),
@@ -131,14 +162,18 @@ train_masked_torch <- function(
         training$y[idx],
         dtype = torch::torch_float()
       )$unsqueeze(2)
+      weight <- torch::torch_tensor(
+        training$weight[idx],
+        dtype = torch::torch_float()
+      )$unsqueeze(2)
       optimizer$zero_grad()
       prediction <- model(input)
-      loss <- torch::nnf_poisson_nll_loss(
+      loss <- (torch::nnf_poisson_nll_loss(
         prediction,
         target,
         log_input = FALSE,
-        reduction = "mean"
-      )
+        reduction = "none"
+      ) * weight)$mean()
       loss$backward()
       optimizer$step()
       total_training_loss <- total_training_loss + loss$item() * length(idx)
@@ -193,7 +228,8 @@ train_masked_torch <- function(
       hidden_dim_1 = hidden_dim_1,
       hidden_dim_2 = hidden_dim_2,
       modality_dropout_probabilities = modality_dropout_probabilities
-    )
+    ),
+    balance_scenarios = balance_scenarios
   )
 }
 
@@ -214,6 +250,8 @@ train_masked_torch <- function(
 #' @param seed Integer split and training seed.
 #' @param modality_dropout_probabilities Named probabilities for the three
 #'   supported modality states during training.
+#' @param balance_scenarios Whether to weight training rows so that every
+#'   scenario contributes the same total weight to the likelihood.
 #'
 #' @return A fitted-model bundle with model, metadata, split data, and history.
 #' @export
@@ -228,7 +266,8 @@ fit_masked_model <- function(
     max_epochs                     = 100L,
     patience                       = 10L,
     seed                           = 20260818L,
-    modality_dropout_probabilities = default_modality_dropout_probabilities()
+    modality_dropout_probabilities = default_modality_dropout_probabilities(),
+    balance_scenarios              = TRUE
 ) {
   data <- filter_analysis_agents(data)
   split <- split_by_run(data, train_fraction, validation_fraction, seed)
@@ -244,7 +283,8 @@ fit_masked_model <- function(
     max_epochs = max_epochs,
     patience = patience,
     seed = seed,
-    modality_dropout_probabilities = modality_dropout_probabilities
+    modality_dropout_probabilities = modality_dropout_probabilities,
+    balance_scenarios = balance_scenarios
   )
   metadata <- list(
     preprocessor = preprocessor,
@@ -252,6 +292,7 @@ fit_masked_model <- function(
     split_run_ids = split$run_ids,
     supported_patterns = c("both", "x_only", "scenario_only"),
     modality_dropout_probabilities = modality_dropout_probabilities,
+    balance_scenarios = balance_scenarios,
     target = "secondary_cases",
     seed = seed
   )

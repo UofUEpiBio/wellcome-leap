@@ -19,14 +19,14 @@ default_simulation_config <- function() {
     recovery_rate              = 0.20,
     x_mean                     = 0,
     x_sd                       = 1,
-    beta_x                     = 1,
-    alpha                      = -4.124644,
-    delta_scenario             = 2.474928,
-    target_r0                  = c(lower = 0.5, higher = 4.0),
+    beta_x                     = 0.5,
+    alpha                      = -2.616672,
+    delta_scenario             = 0.984734,
+    target_r0                  = c(lower = 1.5, higher = 3.0),
     max_days                   = 120L,
     infection_cutoff_day       = 60L,
     min_transmission_days      = 30L,
-    early_susceptible_fraction = 0.90,
+    early_susceptible_fraction = 0.95,
     base_seed                  = 20260818L
   )
 }

@@ -44,7 +44,7 @@ them to be `analysis_eligible`:
 |----|----|----|
 | Infected on or before day 60 | `infection_cutoff_day` | Leaves at least 60 days to transmit inside the 120-day horizon |
 | Transmission window of at least 30 days | `min_transmission_days` | Rules out right-censored offspring counts |
-| Infected while at least 90% of the population was susceptible | `early_susceptible_fraction` | Rules out counts capped by susceptible depletion |
+| Infected while at least 95% of the population was susceptible | `early_susceptible_fraction` | Rules out counts capped by susceptible depletion |
 | Not exposed or infectious at the horizon | `max_days` | Rules out agents whose infectious period never ended |
 
 The pseudo-source row identified by `source = -1` is excluded before
@@ -74,18 +74,28 @@ knitr::kable(eligibility, digits = 3)
 
 | scenario | infected_agents | infected_after_cutoff | infected_after_early_phase | censored_at_horizon | eligible_agents | eligible_fraction |
 |:---|---:|---:|---:|---:|---:|---:|
-| higher | 9992710 | 10734 | 9100964 | 89 | 891745 | 0.089 |
-| lower | 9128 | 153 | 0 | 7 | 8975 | 0.983 |
+| higher | 9613099 | 3654073 | 9144999 | 35531 | 467186 | 0.049 |
+| lower | 852123 | 740604 | 485557 | 240207 | 111471 | 0.131 |
 
 ``` r
 analysis_agents <- filter_analysis_agents(study$agents)
 ```
 
-Susceptible depletion, not the infection-day cutoff, is what excludes
-most `higher`-scenario agents. That scenario leaves its early phase
-after roughly three weeks and then goes on to infect essentially the
-whole population well before day 60, so nearly all of its infections
-happen after susceptible depletion has begun.
+The two scenarios lose agents to different criteria. The `higher`
+epidemic leaves its early phase after about five weeks and then infects
+essentially the whole population, so susceptible depletion is what
+excludes most of its agents. The `lower` epidemic stays inside the early
+phase far longer, and the day-60 infection cutoff is what excludes most
+of its agents. Both scenarios are supercritical, so both contribute a
+well-populated analysis window: eligible `higher` agents outnumber
+eligible `lower` agents by roughly four to one rather than by the two
+orders of magnitude a subcritical `lower` scenario would produce.
+
+Most runs still have exposed or infectious agents at the horizon. That
+is a statement about the epidemic, not about the analyzed agents: an
+agent enters the window only when its own infectious period has ended,
+and an agent infected on or before day 60 has at least 60 days to
+recover before day 120.
 
 ``` r
 run_shape <- do.call(rbind, lapply(
@@ -105,28 +115,27 @@ knitr::kable(run_shape, digits = 1)
 
 | scenario | median_early_last_day | median_final_size | runs_active_at_horizon |
 |:---------|----------------------:|------------------:|-----------------------:|
-| higher   |                    22 |              9993 |                     76 |
-| lower    |                   120 |                 7 |                      4 |
+| higher   |                    34 |              9625 |                    999 |
+| lower    |                   108 |               720 |                    859 |
 
 ## Why the unfiltered average is bounded by one
 
 Every non-seed infection is counted exactly once as somebody’s secondary
 case. Averaging `R_i` over all infected agents therefore returns
-`(final size - seeds) / final size`, which approaches one from below in
-any completed epidemic regardless of how transmissible the organism is.
-The analysis window removes that artifact.
+`(infections - seeds) / infections`, which sits just below one
+regardless of how transmissible the organism is. The analysis window
+removes that artifact.
 
 ``` r
 comparison <- do.call(rbind, lapply(
   split(study$agents, study$agents$scenario),
   function(data) {
-    complete <- data[data$outcome_complete, ]
-    within_cutoff <- complete[
-      complete$infection_day <= config$infection_cutoff_day,
+    within_cutoff <- data[
+      data$infection_day <= config$infection_cutoff_day,
     ]
     data.frame(
       scenario = data$scenario[[1]],
-      all_infected = mean(complete$secondary_cases),
+      all_infected = mean(data$secondary_cases),
       infected_by_cutoff = mean(within_cutoff$secondary_cases),
       analysis_eligible = mean(
         data$secondary_cases[data$analysis_eligible]
@@ -141,8 +150,15 @@ knitr::kable(comparison, digits = 3)
 
 | scenario | all_infected | infected_by_cutoff | analysis_eligible | target_r0 |
 |:---------|-------------:|-------------------:|------------------:|----------:|
-| higher   |        1.000 |              1.000 |             4.012 |       4.0 |
-| lower    |        0.452 |              0.453 |             0.453 |       0.5 |
+| higher   |        0.999 |              1.362 |             2.987 |       3.0 |
+| lower    |        0.994 |              1.477 |             1.477 |       1.5 |
+
+The first column is the identity. The second still includes agents
+infected after the susceptible pool began to deplete, which is why it
+stays far below the target in the `higher` scenario; in the `lower`
+scenario the early phase outlasts the day-60 cutoff, so the second and
+third columns coincide. Only the third column estimates the
+transmissibility the calibration targeted.
 
 ## Individual reproduction-number distribution
 
@@ -185,8 +201,8 @@ knitr::kable(ri_summary, digits = 3)
 
 | scenario | infected_agents | mean_ri | sd_ri | p05 | p25 | median | p75 | p95 | zero_fraction |
 |:---------|----------------:|--------:|------:|----:|----:|-------:|----:|----:|--------------:|
-| higher   |          891745 |   4.012 | 5.066 |   0 |   1 |      2 |   6 |  14 |         0.233 |
-| lower    |            8975 |   0.453 | 1.061 |   0 |   0 |      0 |   1 |   2 |         0.739 |
+| higher   |          467186 |   2.987 | 3.453 |   0 |   1 |      2 |   4 |  10 |         0.218 |
+| lower    |          111471 |   1.477 | 2.015 |   0 |   0 |      1 |   2 |   5 |         0.399 |
 
 ``` r
 boxplot(
@@ -260,8 +276,8 @@ knitr::kable(pooled_early, digits = 3)
 
 | scenario | mean_ri |    se | infected_agents |
 |:---------|--------:|------:|----------------:|
-| higher   |   4.012 | 0.005 |          891745 |
-| lower    |   0.453 | 0.011 |            8975 |
+| higher   |   2.987 | 0.005 |          467186 |
+| lower    |   1.477 | 0.006 |          111471 |
 
 ``` r
 knitr::kable(run_early, digits = 3)
@@ -269,12 +285,13 @@ knitr::kable(run_early, digits = 3)
 
 | scenario | mean_run_ri | sd_run_ri | runs |
 |:---------|------------:|----------:|-----:|
-| higher   |       4.018 |     0.136 | 1000 |
-| lower    |       0.328 |     0.253 | 1000 |
+| higher   |       2.986 |     0.166 | 1000 |
+| lower    |       1.301 |     0.383 | 1000 |
 
-The pooled means sit close to the 0.5 and 4.0 targets. The run-level
-`lower` mean is smaller than the pooled mean because most `lower` runs
-go extinct with only their five seeds, so each of those runs contributes
-a mean of zero with equal weight. These values vary around the targets
-because this is a finite stochastic model. The calibration script
-refines the scenario intercepts before the production run.
+The pooled means sit close to the 1.5 and 3 targets. The run-level
+`lower` mean is smaller than the pooled mean because every run counts
+once no matter how many eligible agents it contributed, and the number
+of eligible agents a run produces is itself correlated with that run’s
+realized transmission. These values vary around the targets because this
+is a finite stochastic model. The calibration script refines the
+scenario intercepts before the production run.
