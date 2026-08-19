@@ -24,6 +24,16 @@ testthat::test_that("mask matrices encode all three patterns", {
   testthat::expect_true(all(scenario_only[, 1] == 0 & scenario_only[, 3] == 0))
 })
 
+testthat::test_that("scenario balancing equalizes the two scenarios", {
+  scenario <- rep(c("lower", "higher"), times = c(10L, 90L))
+  weights <- scenario_balance_weights(scenario)
+  totals <- tapply(weights, scenario, sum)
+
+  testthat::expect_equal(totals[["lower"]], totals[["higher"]])
+  testthat::expect_equal(mean(weights), 1)
+  testthat::expect_true(all(weights > 0))
+})
+
 testthat::test_that("torch modality dropout retains one or both inputs", {
   testthat::skip_if_not_installed("torch")
   torch::torch_manual_seed(19L)
@@ -65,6 +75,7 @@ testthat::test_that("torch model trains, predicts, and serializes", {
     patience = 5L,
     seed = 81L
   )
+  testthat::expect_true(fit$metadata$balance_scenarios)
   one_row <- data.frame(x = 0.5, scenario = "higher")
   input <- make_masked_matrix(one_row, "both", fit$metadata$preprocessor)
   prediction <- predict_rate_matrix(fit$model, input)

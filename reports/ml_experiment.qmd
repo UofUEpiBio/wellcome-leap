@@ -11,7 +11,7 @@ This experiment trains the native R `torch` surrogate with modality dropout and 
 
 ## Production simulation data
 
-The model uses analysis-eligible individual outcomes from all 1,000 production simulations per organism scenario. Each simulation contains 10,000 agents observed for 120 days. An agent enters the individual reproduction-number dataset when it was infected on or before day 60, therefore had at least 60 remaining days to transmit, was infected while at least 90% of the population was still susceptible, and had finished its infectious period by the horizon. Eligible agents with zero secondary infections are kept.
+The model uses analysis-eligible individual outcomes from all 1,000 production simulations per organism scenario. Each simulation contains 10,000 agents observed for 120 days. An agent enters the individual reproduction-number dataset when it was infected on or before day 60, therefore had at least 60 remaining days to transmit, was infected while at least 95% of the population was still susceptible, and had finished its infectious period by the horizon. Eligible agents with zero secondary infections are kept.
 
 Without that window the supervised target would be uninformative: averaged over every infected agent, `R_i` is pinned just below one by the final-size identity in any completed epidemic, no matter how transmissible the organism is. The [simulation experiment](simulation_experiment.md) quantifies the effect.
 
@@ -25,6 +25,7 @@ source("../R/simulate.R")
 source("../R/masking.R")
 source("../R/torch_model.R")
 source("../R/fit_models.R")
+source("../R/predict.R")
 
 config <- default_simulation_config()
 study <- load_simulation_batches(
@@ -77,7 +78,7 @@ knitr::kable(split_summary)
 
 During training, torch-native modality dropout independently assigns each observation one of three equally likely states: both inputs retained, scenario dropped, or `X` dropped. Both modalities are never dropped together. The four network inputs are standardized `X`, encoded scenario, and the two observation indicators. Dropout is disabled during validation and inference, where the requested observation pattern is applied explicitly. The network has hidden widths 32 and 16 and a softplus output trained with Poisson negative log-likelihood.
 
-The analysis window makes the two scenarios very unequal in size. A `higher` epidemic leaves its early phase after about three weeks but infects almost the whole population, whereas a `lower` epidemic usually dies out with its five seeds, so eligible `higher` agents outnumber eligible `lower` agents by roughly a hundred to one. Two settings keep the rare scenario from being ignored. Early stopping averages the validation loss across scenarios before combining it across modality states with the dropout probabilities, and the batch size is small enough to give each epoch several hundred gradient steps.
+The analysis window still admits roughly four times as many `higher` agents as `lower` agents, because the `higher` epidemic infects the whole population while the `lower` epidemic is limited by the day-60 infection cutoff. That imbalance matters most when an input is hidden: a prediction made from `X` alone is an average over organisms, so whichever scenario supplies more rows would otherwise decide it. Three settings keep the scenarios on equal terms. Training rows are weighted by [`scenario_balance_weights()`](../R/fit_models.R) so that each scenario contributes the same total weight to the Poisson likelihood, early stopping averages the validation loss across scenarios before combining it across modality states with the dropout probabilities, and the batch size is small enough to give each epoch several hundred gradient steps.
 
 ## Fitting and validation history
 
@@ -129,6 +130,40 @@ knitr::kable(overall_rmse, digits = 3)
 Differences between the three RMSE values quantify the predictive cost of masking each input. RMSE is aligned with conditional-mean prediction and therefore with the expected-count interpretation of the Poisson model. Even inside the analysis window, the intrinsic Poisson-like spread of realized offspring counts accounts for substantial individual variation, so RMSE stays large relative to the conditional means. A later extension could add infection time or susceptible fraction while retaining the same modality-dropout interface.
 
 The incomplete-input estimates are population averages over the missing feature. In particular, an `X`-only prediction cannot identify the organism and a scenario-only prediction averages over the training distribution of `X`.
+
+## Conditional means by observation pattern
+
+RMSE is dominated by the irreducible spread of a count outcome, so it cannot show whether the three patterns are centered correctly. This table compares each pattern against the empirical mean `R_i` of the test agents in a narrow band around `X = -1`, `0`, and `1`.
+
+```{r}
+x_targets <- c(-1, 0, 1)
+x_tolerance <- 0.1
+test_data <- fit$split$test
+conditional_means <- do.call(rbind, lapply(
+  c("lower", "higher"),
+  function(scenario) {
+    do.call(rbind, lapply(x_targets, function(x_value) {
+      rows <- test_data$scenario == scenario &
+        abs(test_data$x - x_value) <= x_tolerance
+      predicted <- function(...) {
+        predict_secondary_cases(fit, ...)$predicted_secondary_cases
+      }
+      data.frame(
+        scenario = scenario,
+        x = x_value,
+        test_agents = sum(rows),
+        empirical = mean(test_data$secondary_cases[rows]),
+        both = predicted(x = x_value, scenario = scenario),
+        x_only = predicted(x = x_value),
+        scenario_only = predicted(scenario = scenario)
+      )
+    }))
+  }
+))
+knitr::kable(conditional_means, digits = 3, row.names = FALSE)
+```
+
+The `both` column tracks the empirical means. The `x_only` column is the same for the two scenarios by construction and lands close to their midpoint, which is what a balanced average over an unknown organism should do. The `scenario_only` column is constant in `X` and reproduces that scenario's overall eligible mean. Each single-input prediction is therefore off by well under a factor of two in either direction, and both inputs together remove that spread.
 
 ## Save local prediction artifacts
 

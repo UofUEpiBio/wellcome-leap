@@ -41,7 +41,7 @@ where:
 - \(p_{is}\) is agent \(i\)'s per-contact probability of transmitting in scenario \(s\);
 - \(S_s=0\) for the lower-transmission organism and \(S_s=1\) for the higher-transmission organism;
 - \(\alpha\) is the baseline log-odds for the lower-transmission organism;
-- \(\beta>0\) controls the strength of continuous agent heterogeneity, provisionally \(\beta=1\); and
+- \(\beta>0\) controls the strength of continuous agent heterogeneity, currently \(\beta=0.5\), chosen so that the feature effect and the scenario effect are of comparable size; and
 - \(\delta>0\) shifts the probability upward for the higher-transmission organism.
 
 This retains the requested monotonic, nonlinear relationship between \(X\) and transmissibility while guaranteeing a valid probability. On the odds scale, a one-unit increase in \(X\) multiplies the transmission odds by \(e^\beta\), and changing from scenario 1 to scenario 2 multiplies the odds by \(e^\delta\).
@@ -57,7 +57,7 @@ No custom C++ model is required for this functional form. The implementation pat
 
 The relevant source path has been verified: `ModelSEIRCONN` obtains the virus from the infectious source agent, and the virus callback evaluates its probability using the agent that owns that virus. Thus, the callback reads \(X_i\) from the transmitter, not from the susceptible recipient.
 
-A temporary in-memory feasibility experiment confirmed that this route produces both a positive \(X\) effect and a scenario shift in individual secondary infections. Production calibration under the standard-normal feature targets mean early \(R_i\) values near 0.5 and 4.0.
+A temporary in-memory feasibility experiment confirmed that this route produces both a positive \(X\) effect and a scenario shift in individual secondary infections. Production calibration under the standard-normal feature targets mean early \(R_i\) values near 1.5 and 3.0.
 
 Custom C++ `epiworld` should be reserved as a fallback if the project later requires an arbitrary non-logistic function, an interaction involving both source and recipient features, time-varying agent features, or other dynamics not exposed by the R callback factories.
 
@@ -101,8 +101,10 @@ The population-level calibration target also needs a precise definition. The rec
 
 Run the two organism scenarios separately, with one transmissible process in each run:
 
-- Scenario 1: lower-transmission antibiotic-resistant organism, target early-epidemic \(R_0 \approx 0.5\).
-- Scenario 2: higher-transmission antibiotic-resistant organism, target early-epidemic \(R_0 \approx 4.0\).
+- Scenario 1: lower-transmission antibiotic-resistant organism, target early-epidemic \(R_0 \approx 1.5\).
+- Scenario 2: higher-transmission antibiotic-resistant organism, target early-epidemic \(R_0 \approx 3.0\).
+
+Both targets are supercritical, and the scenario contrast is deliberately kept close to the size of the feature effect (\(\beta = 0.5\)). The missing-input predictions are marginal averages by construction: an \(X\)-only prediction averages over the organism and a scenario-only prediction averages over \(X\). Those averages are only useful when neither input dominates the other. A subcritical scenario 1 would also contribute almost no analysis-eligible agents, because its epidemics die out with their seeds, so every \(X\)-only prediction would collapse onto scenario 2.
 
 The organism/scenario label and agent-level \(X\) will determine the transmission probability. Separate runs avoid competition between two organisms for the same susceptible population and produce a clean supervised-learning dataset.
 
@@ -121,7 +123,7 @@ The dataset will include **every infected agent whose realized \(R_i\) measures 
 Two distinct mechanisms would otherwise corrupt the target, and the `analysis_eligible` flag excludes both:
 
 - **Right-censoring.** An agent infected close to the horizon has not finished transmitting. Agents infected after the 60-day cutoff are excluded, which leaves every analyzed agent at least 60 days of transmission opportunity inside the 120-day horizon; agents still exposed or infectious at the horizon are excluded as well.
-- **Susceptible depletion.** Once susceptibles run out, offspring counts are capped by the epidemic's final size rather than by \(X\) and the organism. Agents infected after the population drops below 90% susceptible are excluded. This is the binding constraint in the higher-transmission scenario, which leaves its early phase after roughly three weeks.
+- **Susceptible depletion.** Once susceptibles run out, offspring counts are capped by the epidemic's final size rather than by \(X\) and the organism. Agents infected after the population drops below 95% susceptible are excluded. This is the binding constraint in the higher-transmission scenario, which leaves its early phase after roughly five weeks; in the lower-transmission scenario the 60-day infection cutoff binds instead.
 
 Both matter because the unfiltered average is an identity, not an estimate: every non-seed infection is somebody's secondary case, so averaging \(R_i\) over all infected agents in a completed epidemic returns \((\text{final size} - \text{seeds}) / \text{final size}\), a number just below one regardless of transmissibility.
 
@@ -166,10 +168,10 @@ Calibration will occur before the 1,000-run-per-scenario production stage.
    = \int_{-\infty}^{\infty}\operatorname{logit}^{-1}(a_s+\beta x)\phi(x)\,dx,
    \]
 
-   where \(\phi\) is the standard-normal density, \(a_1=\alpha\), \(a_2=\alpha+\delta\), \(C\) is the daily contact rate, and \(\gamma\) is the daily recovery probability. With \(C=4\), \(\gamma=0.2\), and \(\beta=1\), numerical integration gives starting values \(\alpha\approx-4.125\) and \(\delta\approx2.475\) for targets 0.5 and 4.0. These are starting values only because the simulator is discrete, stochastic, and finite.
+   where \(\phi\) is the standard-normal density, \(a_1=\alpha\), \(a_2=\alpha+\delta\), \(C\) is the daily contact rate, and \(\gamma\) is the daily recovery probability. With \(C=4\), \(\gamma=0.2\), and \(\beta=0.5\), numerical integration gives starting values \(\alpha\approx-2.617\) and \(\delta\approx0.797\) for targets 1.5 and 3.0. These are starting values only because the simulator is discrete, stochastic, and finite.
 3. For candidate values around that starting point, run a moderate batch of simulations using common random numbers across candidates to reduce Monte Carlo noise.
-4. Estimate early-epidemic \(R_0\) from `get_reproductive_number()` among agents infected before a specified susceptible-depletion threshold (recommended: while at least 90% of the population remains susceptible).
-5. Use stochastic root finding or a bounded grid/refinement search to approach each target. Exact equality is not required; the aim is clear separation around \(R_0\approx0.5\) and \(R_0\approx4.0\), with Monte Carlo intervals reported.
+4. Estimate early-epidemic \(R_0\) from `get_reproductive_number()` among agents infected before a specified susceptible-depletion threshold (recommended: while at least 95% of the population remains susceptible).
+5. Use stochastic root finding or a bounded grid/refinement search to approach each target. Exact equality is not required; the aim is clear separation around \(R_0\approx1.5\) and \(R_0\approx3.0\), with Monte Carlo intervals reported.
 6. Confirm that \(\beta>0\) and \(\delta>0\), so transmission increases with \(X\) and is higher in scenario 2 while all other epidemiological parameters remain fixed.
 7. Validate the chosen parameters in a fresh simulation batch not used during calibration.
 8. Freeze the calibrated configuration before production runs.
@@ -330,7 +332,7 @@ The scientific design and local compute environment have been resolved, and the 
 ### Gate 1: scientific design — complete
 
 - Two scenarios represent two different antibiotic-resistant organisms.
-- Prioritize approximate \(R_0\) targets of 0.5 and 4.0 and create the difference through the scenario-specific probability-of-transmission function.
+- Prioritize approximate \(R_0\) targets of 1.5 and 3.0 and create the difference through the scenario-specific probability-of-transmission function.
 - Use individual realized secondary-case count \(R_i\), as returned in the `rt` column of `get_reproductive_number()`.
 - Retain all infected agents, including zero-secondary-case agents.
 - Use the configured incubation, recovery, five-agent seeding, and 120-day horizon values for the toy prototype, analyzing only agents infected within the first 60 days.
@@ -362,12 +364,13 @@ The prototype production experiment runs locally using up to eight CPU workers. 
 ## 12. Approved working design
 
 - Two separate scenarios representing lower- and higher-transmission antibiotic-resistant organisms.
-- Native logit transmission, \(p_{is}=\operatorname{logit}^{-1}(\alpha+\beta X_i+\delta S_s)\), calibrated to produce clearly separated empirical early-epidemic reproduction numbers near 0.5 and 4.0.
+- Native logit transmission, \(p_{is}=\operatorname{logit}^{-1}(\alpha+\beta X_i+\delta S_s)\), calibrated to produce clearly separated empirical early-epidemic reproduction numbers near 1.5 and 3.0.
 - \(R_i\), obtained from `get_reproductive_number()`, as the individual target.
 - All infected agents retained, including zeros.
 - Redraw \(X\) in each replicate unless later changed.
 - Use the provisional epidemiological constants in Section 2 for the smoke test.
 - Train with equal probabilities for the three supported observation patterns unless expected real-world feature availability becomes known.
+- Weight training rows so that both scenarios contribute the same total weight to the likelihood, so that a prediction made without the scenario averages over equally likely organisms rather than over the scenario that contributes more analysis-eligible agents.
 - Compare negative-binomial regression with one compact missingness-augmented R `torch` count model.
 
 ## 13. Technical references for the transmission callback
