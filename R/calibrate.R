@@ -136,7 +136,7 @@ calibrate_scenario <- function(
     n_reps     = 200L,
     iterations = 5L,
     workers    = 1L,
-    half_width = 0.6
+    half_width = 1.5
 ) {
   center <- analytic_effective_intercept(target_r0, config)
   lower <- center - half_width

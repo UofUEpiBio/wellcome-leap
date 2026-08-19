@@ -1,7 +1,19 @@
 testthat::test_that("analytic starting parameters match requested targets", {
   config <- default_simulation_config()
   pars <- analytic_starting_parameters(config)
-  testthat::expect_equal(unname(pars[["alpha"]]), -2.0478, tolerance = 1e-3)
+  effective_intercepts <- c(
+    lower = pars[["alpha"]],
+    higher = pars[["alpha"]] + pars[["delta_scenario"]]
+  )
+  implied_r0 <- vapply(
+    effective_intercepts,
+    mean_logit_normal,
+    numeric(1),
+    beta = config$beta_x,
+    mean = config$x_mean,
+    sd = config$x_sd
+  ) * config$contact_rate / config$recovery_rate
+  testthat::expect_equal(implied_r0, config$target_r0, tolerance = 1e-3)
   testthat::expect_gt(pars[["delta_scenario"]], 0)
 })
 
@@ -29,9 +41,13 @@ testthat::test_that("seeding pseudo-source rows are excluded", {
 testthat::test_that("ModelSEIRCONN callback and extraction agree with edges", {
   config <- default_simulation_config()
   config$n_agents <- 200L
+  config$prevalence <- 0.05
   config$max_days <- 100L
   result <- simulate_one(
-    config, "lower", replicate_id = 1L, seed = 90210L,
+    config,
+    "higher",
+    replicate_id      = 1L,
+    seed              = 90210L,
     keep_transmissions = TRUE
   )
   testthat::expect_equal(
