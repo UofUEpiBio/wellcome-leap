@@ -15,10 +15,13 @@ source("../R/within_host.R")
 source("../R/omics.R")
 source("../R/reproduction.R")
 source("../R/multiscale.R")
+source("../R/multimodal_emulator.R")
 
 study <- readRDS("../data/derived/multiscale/fitted_study.rds")
-truth_targets <- combine_multiscale_targets(study$truth)
+truth_targets <- study$truth_targets
 fitted_targets <- combine_multiscale_targets(study$fitted)
+emulator_data <- make_multiscale_emulator_data(study$fitted)
+emulator_split <- split_multiscale_by_profile(emulator_data)
 design_summary <- aggregate(
   profile_id ~ site_id,
   study$design,
@@ -30,17 +33,17 @@ knitr::kable(design_summary, row.names = FALSE)
 
 | site_id | profiles |
 |:--------|---------:|
-| site_a  |       25 |
-| site_b  |       25 |
-| site_c  |       25 |
-| site_d  |       25 |
+| site_a  |     1000 |
+| site_b  |     1000 |
+| site_c  |     1000 |
+| site_d  |     1000 |
 
 Each of four sites changes the distribution of the three fitted
 parameters, contact rate, susceptible fraction, and structural assay
 availability. Every host is observed on days 0, 3, 7, 14, and 30.
 
 ``` r
-knitr::kable(study$simulated[[1]]$observations, digits = 3, row.names = FALSE)
+knitr::kable(study$fitted[[1]]$observations, digits = 3, row.names = FALSE)
 ```
 
 | profile_id | site_id | day | antibiotic_active | qpcr_log10 | qpcr_censored | ecoli_log10 | klebsiella_log10 | culture_positive | link_bg1 | link_bg2 | link_bg3 | link_bg4 |
@@ -59,20 +62,19 @@ four backgrounds share conjugation `h`, division-associated segregation
 relative within- and cross-species conjugation rates.
 
 ``` r
-parameter_recovery <- do.call(rbind, Map(
-  function(truth, fitted) {
+parameter_recovery <- do.call(rbind, lapply(
+  study$fitted,
+  function(fitted) {
     data.frame(
-      profile_id = truth$profile$profile_id,
-      site_id = truth$profile$site_id,
-      parameter = names(truth$parameters),
-      truth = unname(truth$parameters),
+      profile_id = fitted$profile$profile_id,
+      site_id = fitted$profile$site_id,
+      parameter = names(fitted$truth_parameters),
+      truth = unname(fitted$truth_parameters),
       fitted = unname(fitted$parameters),
       converged = fitted$fit$convergence == 0,
       boundary = fitted$fit$at_boundary
     )
-  },
-  study$truth,
-  study$fitted
+  }
 ))
 parameter_recovery$absolute_error <- abs(
   parameter_recovery$fitted - parameter_recovery$truth
@@ -93,9 +95,9 @@ knitr::kable(parameter_summary, digits = 3, row.names = FALSE)
 
 | parameter | profiles | mean_truth | mean_fitted |  rmse | boundary_fraction |
 |:----------|---------:|-----------:|------------:|------:|------------------:|
-| delta     |      100 |      0.134 |       0.125 | 0.066 |              0.92 |
-| gamma     |      100 |      0.086 |       0.095 | 0.057 |              0.92 |
-| h         |      100 |      0.149 |       0.161 | 0.088 |              0.92 |
+| delta     |     4000 |      0.140 |       0.143 | 0.069 |             0.882 |
+| gamma     |     4000 |      0.088 |       0.094 | 0.055 |             0.882 |
+| h         |     4000 |      0.148 |       0.164 | 0.090 |             0.882 |
 
 ``` r
 groups <- split(parameter_recovery, parameter_recovery$parameter)
@@ -212,10 +214,10 @@ knitr::kable(comparison_summary, digits = 3, row.names = FALSE)
 
 | site_id | mean_overstatement | maximum_overstatement |
 |:--------|-------------------:|----------------------:|
-| site_a  |              0.016 |                 0.074 |
-| site_b  |              0.044 |                 0.116 |
-| site_c  |              0.051 |                 0.112 |
-| site_d  |              0.035 |                 0.085 |
+| site_a  |              0.016 |                 0.114 |
+| site_b  |              0.030 |                 0.117 |
+| site_c  |              0.045 |                 0.117 |
+| site_d  |              0.039 |                 0.117 |
 
 The stochastic ABM retains realized acquisitions as a diagnostic rather
 than calling one offspring count a reproduction number.
@@ -233,7 +235,7 @@ knitr::kable(abm_summary, digits = 3, row.names = FALSE)
 
 | infected_carriers | realized_acquisitions | mean_realized_acquisitions |
 |------------------:|----------------------:|---------------------------:|
-|               281 |                   276 |                      0.982 |
+|               540 |                   535 |                      0.991 |
 
 ## Paired intervention scenarios
 
@@ -252,38 +254,57 @@ knitr::kable(intervention_summary, digits = 3, row.names = FALSE)
 
 | intervention           | r0_within | re_within | r0_between | re_between |
 |:-----------------------|----------:|----------:|-----------:|-----------:|
-| baseline               |     0.704 |     1.059 |      5.222 |      5.413 |
-| conjugation_inhibition |     0.410 |     0.688 |      2.135 |      2.491 |
-| shorter_antibiotic     |     0.704 |     0.859 |      5.222 |      4.929 |
+| baseline               |     0.709 |     1.126 |      5.234 |      5.549 |
+| conjugation_inhibition |     0.412 |     0.741 |      2.146 |      2.603 |
+| shorter_antibiotic     |     0.709 |     0.889 |      5.234 |      4.972 |
 
 ## Missing-modality emulator
 
-The emulator is trained on fitted mechanistic targets from 100 synthetic
-host profiles and three intervention settings per profile. During model
-development, one model is evaluated on an entirely unseen synthetic
-site. The browser model is then retrained with every site represented
-and evaluated on profiles held out within each site, because the
-deployed interface supports all four site profiles. Errors against
-fitted targets measure emulation; differences between fitted and truth
-targets measure mechanistic fitting error. Neither is a Bayesian
-uncertainty interval or a confidence interval.
+The emulator is trained on fitted mechanistic targets from 4,000
+synthetic host profiles (1,000 per site) and three intervention settings
+per profile. The split contains 2,800 training, 600 validation, and 600
+test profiles; intervention rows for one profile never cross partitions.
+Each training case is evaluated under all seven nonempty modality masks.
+These masks teach missing-modality behavior but are not counted as
+independent simulations. Each mechanistic profile fit used one
+deterministic optimizer start, matching the smaller benchmark while
+keeping the scaled study practical.
+
+The validation-selected loss combines log-scale MSE with raw-scale MSE
+after standardizing each target by its training-set standard deviation.
+This preserves relative accuracy while aligning training with the
+reported raw RMSE. During model development, one separate model is
+evaluated on an entirely unseen synthetic site. The browser model is
+retrained with every site represented and evaluated on profiles held out
+within each site, because the deployed interface supports all four site
+profiles. Errors against fitted targets measure emulation; differences
+between fitted and truth targets measure mechanistic fitting error.
+Neither is a Bayesian uncertainty interval or a confidence interval.
 
 ``` r
 evaluation <- readRDS("../artifacts/multiscale_emulator_evaluation.rds")
 complete_input <- evaluation[evaluation$pattern == "all", ]
+test_means <- vapply(
+  c("r0_within", "re_within", "r0_between", "re_between"),
+  function(target) mean(emulator_split$test[[target]]),
+  numeric(1)
+)
+complete_input$test_mean <- test_means[complete_input$target]
+complete_input$rmse_percent_of_mean <-
+  100 * complete_input$rmse / complete_input$test_mean
 knitr::kable(complete_input, digits = 3, row.names = FALSE)
 ```
 
-| evaluation_scope | pattern | target     |   n |  rmse | balanced_accuracy |
-|:-----------------|:--------|:-----------|----:|------:|------------------:|
-| leave_site_out   | all     | r0_within  |  75 | 0.827 |             0.500 |
-| leave_site_out   | all     | re_within  |  75 | 1.124 |             0.500 |
-| leave_site_out   | all     | r0_between |  75 | 7.034 |             0.500 |
-| leave_site_out   | all     | re_between |  75 | 6.467 |             0.500 |
-| profile_holdout  | all     | r0_within  |  36 | 0.272 |             0.667 |
-| profile_holdout  | all     | re_within  |  36 | 0.353 |             0.803 |
-| profile_holdout  | all     | r0_between |  36 | 2.233 |             0.976 |
-| profile_holdout  | all     | re_between |  36 | 1.856 |             0.978 |
+| evaluation_scope | pattern | target | n | rmse | balanced_accuracy | test_mean | rmse_percent_of_mean |
+|:---|:---|:---|---:|---:|---:|---:|---:|
+| leave_site_out | all | r0_within | 3000 | 0.938 | 0.500 | 0.612 | 153.350 |
+| leave_site_out | all | re_within | 3000 | 1.338 | 0.500 | 0.916 | 146.092 |
+| leave_site_out | all | r0_between | 3000 | 6.194 | 0.501 | 4.238 | 146.167 |
+| leave_site_out | all | re_between | 3000 | 5.752 | 0.500 | 4.385 | 131.173 |
+| profile_holdout | all | r0_within | 1800 | 0.189 | 0.819 | 0.612 | 30.903 |
+| profile_holdout | all | re_within | 1800 | 0.306 | 0.833 | 0.916 | 33.407 |
+| profile_holdout | all | r0_between | 1800 | 1.974 | 0.891 | 4.238 | 46.588 |
+| profile_holdout | all | re_between | 1800 | 1.726 | 0.854 | 4.385 | 39.347 |
 
 ``` r
 profile_missingness <- evaluation[
@@ -293,22 +314,22 @@ profile_missingness <- evaluation[
 knitr::kable(profile_missingness, digits = 3, row.names = FALSE)
 ```
 
-| evaluation_scope | pattern           | target     |   n |  rmse | balanced_accuracy |
-|:-----------------|:------------------|:-----------|----:|------:|------------------:|
-| profile_holdout  | all               | re_within  |  36 | 0.353 |             0.803 |
-| profile_holdout  | all               | re_between |  36 | 1.856 |             0.978 |
-| profile_holdout  | no_quantitative   | re_within  |  36 | 0.510 |             0.709 |
-| profile_holdout  | no_quantitative   | re_between |  36 | 3.322 |             0.875 |
-| profile_holdout  | no_genomic        | re_within  |  36 | 0.595 |             0.666 |
-| profile_holdout  | no_genomic        | re_between |  36 | 3.547 |             0.747 |
-| profile_holdout  | no_clinical       | re_within  |  36 | 0.542 |             0.615 |
-| profile_holdout  | no_clinical       | re_between |  36 | 3.717 |             0.846 |
-| profile_holdout  | quantitative_only | re_within  |  36 | 0.626 |             0.550 |
-| profile_holdout  | quantitative_only | re_between |  36 | 4.079 |             0.615 |
-| profile_holdout  | genomic_only      | re_within  |  36 | 0.673 |             0.435 |
-| profile_holdout  | genomic_only      | re_between |  36 | 4.774 |             0.846 |
-| profile_holdout  | clinical_only     | re_within  |  36 | 0.709 |             0.550 |
-| profile_holdout  | clinical_only     | re_between |  36 | 4.528 |             0.600 |
+| evaluation_scope | pattern           | target     |    n |  rmse | balanced_accuracy |
+|:-----------------|:------------------|:-----------|-----:|------:|------------------:|
+| profile_holdout  | all               | re_within  | 1800 | 0.306 |             0.833 |
+| profile_holdout  | all               | re_between | 1800 | 1.726 |             0.854 |
+| profile_holdout  | no_quantitative   | re_within  | 1800 | 0.383 |             0.741 |
+| profile_holdout  | no_quantitative   | re_between | 1800 | 2.529 |             0.734 |
+| profile_holdout  | no_genomic        | re_within  | 1800 | 0.468 |             0.812 |
+| profile_holdout  | no_genomic        | re_between | 1800 | 2.869 |             0.822 |
+| profile_holdout  | no_clinical       | re_within  | 1800 | 0.406 |             0.788 |
+| profile_holdout  | no_clinical       | re_between | 1800 | 2.893 |             0.783 |
+| profile_holdout  | quantitative_only | re_within  | 1800 | 0.514 |             0.795 |
+| profile_holdout  | quantitative_only | re_between | 1800 | 3.390 |             0.762 |
+| profile_holdout  | genomic_only      | re_within  | 1800 | 0.617 |             0.613 |
+| profile_holdout  | genomic_only      | re_between | 1800 | 4.176 |             0.597 |
+| profile_holdout  | clinical_only     | re_within  | 1800 | 0.520 |             0.723 |
+| profile_holdout  | clinical_only     | re_between | 1800 | 3.428 |             0.712 |
 
 ``` r
 matched <- merge(
@@ -332,10 +353,10 @@ knitr::kable(fitting_error, digits = 3, row.names = FALSE)
 
 | target     |  rmse |
 |:-----------|------:|
-| r0_within  | 0.368 |
-| re_within  | 0.506 |
-| r0_between | 3.994 |
-| re_between | 3.409 |
+| r0_within  | 0.350 |
+| re_within  | 0.496 |
+| r0_between | 3.645 |
+| re_between | 3.062 |
 
 ## Scientific limitations exposed by the prototype
 
@@ -345,6 +366,12 @@ knitr::kable(fitting_error, digits = 3, row.names = FALSE)
   observations of conjugation.
 - Five observations do not identify background-specific biological
   parameters; this prototype therefore fits only three shared values.
+- Even the three shared parameters remain weakly identified: about 88%
+  of synthetic profile fits place at least one parameter on a search
+  boundary.
+- The scaled experiment uses one optimization start per profile;
+  multi-start fitting could improve individual optima but would not
+  resolve structural non-identifiability.
 - Carriage and clinical infection are different outcomes.
 - Deterministic ODEs do not represent rare-transfer extinction.
 - Point fitting does not propagate mechanistic uncertainty into the

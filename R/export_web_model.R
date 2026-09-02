@@ -155,7 +155,12 @@ extract_multiscale_web_model <- function(
       hidden_dim_2 = as.integer(object$architecture$hidden_dim_2),
       output_dim = length(object$target_names),
       activation = "relu",
-      output_activation = "exp"
+      output_activation = "exp",
+      raw_loss_weight = if (is.null(object$architecture$raw_loss_weight)) {
+        0
+      } else {
+        as.numeric(object$architecture$raw_loss_weight)
+      }
     ),
     generated = list(
       source = source_label,

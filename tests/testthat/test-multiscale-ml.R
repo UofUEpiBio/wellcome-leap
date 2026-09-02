@@ -87,11 +87,13 @@ testthat::test_that("multiscale emulator trains and predicts positive metrics", 
     hidden_dim_2 = 4L,
     max_epochs = 10L,
     patience = 3L,
-    seed = 91L
+    seed = 91L,
+    raw_loss_weight = 0.1
   )
   prediction <- predict_multiscale_emulator(fit, fit$split$test)
   testthat::expect_true(all(as.matrix(prediction) > 0))
   testthat::expect_equal(nrow(prediction), nrow(fit$split$test))
+  testthat::expect_equal(fit$architecture$raw_loss_weight, 0.1)
 
   weights <- tempfile(fileext = ".pt")
   metadata <- tempfile(fileext = ".rds")

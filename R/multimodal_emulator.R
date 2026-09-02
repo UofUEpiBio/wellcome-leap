@@ -246,21 +246,27 @@ create_multiscale_emulator <- function(
 #' @param patience Early-stopping patience.
 #' @param seed Random seed.
 #' @param partitions Optional precomputed train, validation, and test partitions.
+#' @param raw_loss_weight Nonnegative weight on target-SD-standardized raw-scale
+#'   MSE, added to the log-scale MSE.
 #'
 #' @return A fitted model bundle with preprocessing, splits, and history.
 #' @export
 fit_multiscale_emulator <- function(
     data,
-    test_site       = "site_d",
-    validation_site = "site_c",
-    hidden_dim_1    = 32L,
-    hidden_dim_2    = 16L,
-    learning_rate   = 0.01,
-    max_epochs      = 200L,
-    patience        = 20L,
-    seed            = 20260901L,
-    partitions      = NULL
+    test_site        = "site_d",
+    validation_site  = "site_c",
+    hidden_dim_1     = 32L,
+    hidden_dim_2     = 16L,
+    learning_rate    = 0.01,
+    max_epochs       = 200L,
+    patience         = 20L,
+    seed             = 20260901L,
+    partitions       = NULL,
+    raw_loss_weight  = 0
 ) {
+  if (!is.finite(raw_loss_weight) || raw_loss_weight < 0) {
+    stop("raw_loss_weight must be a nonnegative number.")
+  }
   set.seed(seed)
   torch::torch_manual_seed(seed)
   split <- if (is.null(partitions)) {
@@ -301,6 +307,26 @@ fit_multiscale_emulator <- function(
   train_y <- torch::torch_tensor(training$y, dtype = torch::torch_float())
   validation_x <- torch::torch_tensor(validation$x, dtype = torch::torch_float())
   validation_y <- torch::torch_tensor(validation$y, dtype = torch::torch_float())
+  target_scale <- apply(as.matrix(split$train[target_names]), 2L, stats::sd)
+  target_scale[!is.finite(target_scale) | target_scale <= 0] <- 1
+  target_scale <- torch::torch_tensor(target_scale, dtype = torch::torch_float())
+  #' Combine relative and standardized absolute target errors
+  #'
+  #' @param prediction Network output on the log scale.
+  #' @param target Mechanistic target on the log scale.
+  #'
+  #' @return A scalar differentiable loss tensor.
+  combined_loss <- function(
+      prediction,
+      target
+  ) {
+    loss <- torch::nnf_mse_loss(prediction, target)
+    if (raw_loss_weight > 0) {
+      raw_error <- (prediction$exp() - target$exp()) / target_scale
+      loss <- loss + raw_loss_weight * raw_error$pow(2)$mean()
+    }
+    loss
+  }
   best_loss <- Inf
   best_state <- NULL
   stale <- 0L
@@ -308,12 +334,12 @@ fit_multiscale_emulator <- function(
   for (epoch in seq_len(max_epochs)) {
     model$train()
     optimizer$zero_grad()
-    training_loss <- torch::nnf_mse_loss(model(train_x), train_y)
+    training_loss <- combined_loss(model(train_x), train_y)
     training_loss$backward()
     optimizer$step()
     model$eval()
     torch::with_no_grad({
-      validation_loss <- torch::nnf_mse_loss(model(validation_x), validation_y)
+      validation_loss <- combined_loss(model(validation_x), validation_y)
     })
     value <- validation_loss$item()
     history[[epoch]] <- data.frame(
@@ -349,7 +375,8 @@ fit_multiscale_emulator <- function(
     architecture = list(
       input_dim = ncol(training$x),
       hidden_dim_1 = hidden_dim_1,
-      hidden_dim_2 = hidden_dim_2
+      hidden_dim_2 = hidden_dim_2,
+      raw_loss_weight = raw_loss_weight
     )
   )
 }

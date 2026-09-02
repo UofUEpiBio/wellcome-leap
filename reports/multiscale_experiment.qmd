@@ -20,10 +20,13 @@ source("../R/within_host.R")
 source("../R/omics.R")
 source("../R/reproduction.R")
 source("../R/multiscale.R")
+source("../R/multimodal_emulator.R")
 
 study <- readRDS("../data/derived/multiscale/fitted_study.rds")
-truth_targets <- combine_multiscale_targets(study$truth)
+truth_targets <- study$truth_targets
 fitted_targets <- combine_multiscale_targets(study$fitted)
+emulator_data <- make_multiscale_emulator_data(study$fitted)
+emulator_split <- split_multiscale_by_profile(emulator_data)
 design_summary <- aggregate(
   profile_id ~ site_id,
   study$design,
@@ -38,7 +41,7 @@ contact rate, susceptible fraction, and structural assay availability. Every
 host is observed on days 0, 3, 7, 14, and 30.
 
 ```{r}
-knitr::kable(study$simulated[[1]]$observations, digits = 3, row.names = FALSE)
+knitr::kable(study$fitted[[1]]$observations, digits = 3, row.names = FALSE)
 ```
 
 ## Truth, observations, and parameter fitting
@@ -49,20 +52,19 @@ antibiotic selection `delta`; a fixed matrix supplies relative within- and
 cross-species conjugation rates.
 
 ```{r}
-parameter_recovery <- do.call(rbind, Map(
-  function(truth, fitted) {
+parameter_recovery <- do.call(rbind, lapply(
+  study$fitted,
+  function(fitted) {
     data.frame(
-      profile_id = truth$profile$profile_id,
-      site_id = truth$profile$site_id,
-      parameter = names(truth$parameters),
-      truth = unname(truth$parameters),
+      profile_id = fitted$profile$profile_id,
+      site_id = fitted$profile$site_id,
+      parameter = names(fitted$truth_parameters),
+      truth = unname(fitted$truth_parameters),
       fitted = unname(fitted$parameters),
       converged = fitted$fit$convergence == 0,
       boundary = fitted$fit$at_boundary
     )
-  },
-  study$truth,
-  study$fitted
+  }
 ))
 parameter_recovery$absolute_error <- abs(
   parameter_recovery$fitted - parameter_recovery$truth
@@ -196,18 +198,37 @@ knitr::kable(intervention_summary, digits = 3, row.names = FALSE)
 
 ## Missing-modality emulator
 
-The emulator is trained on fitted mechanistic targets from 100 synthetic host
-profiles and three intervention settings per profile. During model development,
-one model is evaluated on an entirely unseen synthetic site. The browser model
-is then retrained with every site represented and evaluated on profiles held out
-within each site, because the deployed interface supports all four site
-profiles. Errors against fitted targets measure emulation; differences between
-fitted and truth targets measure mechanistic fitting error. Neither is a
-Bayesian uncertainty interval or a confidence interval.
+The emulator is trained on fitted mechanistic targets from 4,000 synthetic host
+profiles (1,000 per site) and three intervention settings per profile. The split
+contains 2,800 training, 600 validation, and 600 test profiles; intervention
+rows for one profile never cross partitions. Each training case is evaluated
+under all seven nonempty modality masks. These masks teach missing-modality
+behavior but are not counted as independent simulations. Each mechanistic
+profile fit used one deterministic optimizer start, matching the smaller
+benchmark while keeping the scaled study practical.
+
+The validation-selected loss combines log-scale MSE with raw-scale MSE after
+standardizing each target by its training-set standard deviation. This preserves
+relative accuracy while aligning training with the reported raw RMSE. During
+model development, one separate model is evaluated on an entirely unseen
+synthetic site. The browser model is retrained with every site represented and
+evaluated on profiles held out within each site, because the deployed interface
+supports all four site profiles. Errors against fitted targets measure
+emulation; differences between fitted and truth targets measure mechanistic
+fitting error. Neither is a Bayesian uncertainty interval or a confidence
+interval.
 
 ```{r}
 evaluation <- readRDS("../artifacts/multiscale_emulator_evaluation.rds")
 complete_input <- evaluation[evaluation$pattern == "all", ]
+test_means <- vapply(
+  c("r0_within", "re_within", "r0_between", "re_between"),
+  function(target) mean(emulator_split$test[[target]]),
+  numeric(1)
+)
+complete_input$test_mean <- test_means[complete_input$target]
+complete_input$rmse_percent_of_mean <-
+  100 * complete_input$rmse / complete_input$test_mean
 knitr::kable(complete_input, digits = 3, row.names = FALSE)
 
 profile_missingness <- evaluation[
@@ -244,6 +265,11 @@ knitr::kable(fitting_error, digits = 3, row.names = FALSE)
   of conjugation.
 - Five observations do not identify background-specific biological parameters;
   this prototype therefore fits only three shared values.
+- Even the three shared parameters remain weakly identified: about 88% of
+  synthetic profile fits place at least one parameter on a search boundary.
+- The scaled experiment uses one optimization start per profile; multi-start
+  fitting could improve individual optima but would not resolve structural
+  non-identifiability.
 - Carriage and clinical infection are different outcomes.
 - Deterministic ODEs do not represent rare-transfer extinction.
 - Point fitting does not propagate mechanistic uncertainty into the emulator.

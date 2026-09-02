@@ -126,12 +126,25 @@ reference/effective reproduction numbers, a summary-coupled carriage ABM, and a
 missing-modality emulator. It models carriage rather than clinical infection.
 The final model is trained with every supported synthetic site represented and
 tested on held-out host profiles; a separate leave-site-out diagnostic records
-the current limitation under site shift.
+the current limitation under site shift. Training uses every nonempty modality
+mask and a validation-selected combination of log-scale and target-standardized
+raw-scale loss.
 
 ``` sh
-Rscript scripts/06_simulate_multiscale.R 4
-Rscript scripts/07_fit_multiscale.R 3
+Rscript scripts/06_simulate_multiscale.R 4 1
+Rscript scripts/07_fit_multiscale.R 1 1 100
 Rscript scripts/08_train_multiscale_emulator.R
+quarto render reports/multiscale_experiment.qmd --to gfm
+```
+
+Those commands are a quick four-profile-per-site smoke run. To reproduce the
+4,000-profile model shipped in `app/model.json`, use:
+
+``` sh
+Rscript scripts/06_simulate_multiscale.R 1000 2
+Rscript scripts/07_fit_multiscale.R 1 2 100
+Rscript scripts/08_train_multiscale_emulator.R
+Rscript scripts/05_export_web_model.R
 quarto render reports/multiscale_experiment.qmd --to gfm
 ```
 
@@ -140,6 +153,15 @@ under ignored `data/derived/` and `artifacts/` paths. The rendered
 [multiscale experiment](reports/multiscale_experiment.md) separates mechanistic
 fitting error from emulator error and records the scientific assumptions that
 the toy implementation exposes.
+
+The optional second argument to the simulation and fitting scripts is the
+number of independent profile workers. On non-Windows systems, values above
+one use a base R `parallel::makeForkCluster()`; the default remains one worker.
+The fitting script accepts a third, optional batch-size argument (default 100)
+to bound worker-result memory. Two workers are recommended on an 18 GB machine.
+Completed batches are checkpointed beneath the ignored
+`data/derived/multiscale/fit_checkpoints/` directory, so an interrupted fit can
+resume without committing generated artifacts.
 
 ## Surrogate architecture
 

@@ -82,6 +82,8 @@ build_multiscale_profile_bundle <- function(
 #' @param profiles_per_site Number of profiles per site.
 #' @param fit_profiles Whether to fit each profile and build fitted bundles.
 #' @param n_starts Number of fitting starts when `fit_profiles` is true.
+#' @param cores Number of forked workers used for independent profiles on
+#'   non-Windows systems.
 #'
 #' @return A list containing simulated profiles, truth bundles, and optionally
 #'   fitted bundles.
@@ -90,8 +92,29 @@ simulate_multiscale_dataset <- function(
     config,
     profiles_per_site = 8L,
     fit_profiles      = FALSE,
-    n_starts         = 5L
+    n_starts          = 5L,
+    cores             = 1L
 ) {
+  cores <- as.integer(cores)
+  if (!is.finite(cores) || cores < 1L) stop("cores must be a positive integer.")
+  #' Apply one independent profile worker using an optional fork cluster
+  #'
+  #' @param values Values supplied one at a time to `worker`.
+  #' @param worker Function applied to each value.
+  #'
+  #' @return A list in the same order as `values`.
+  map_profiles <- function(
+      values,
+      worker
+  ) {
+    if (cores > 1L && .Platform$OS.type != "windows") {
+      cluster <- parallel::makeForkCluster(cores)
+      on.exit(parallel::stopCluster(cluster), add = TRUE)
+      parallel::parLapply(cluster, values, worker)
+    } else {
+      lapply(values, worker)
+    }
+  }
   sites <- multiscale_site_table()$site_id
   design <- expand.grid(
     profile_number = seq_len(profiles_per_site),
@@ -104,7 +127,7 @@ simulate_multiscale_dataset <- function(
     design$site_id,
     design$profile_number
   )
-  simulated <- lapply(seq_len(nrow(design)), function(index) {
+  simulated <- map_profiles(seq_len(nrow(design)), function(index) {
     simulate_multiscale_profile(
       design$site_id[index],
       design$profile_id[index],
@@ -112,10 +135,12 @@ simulate_multiscale_dataset <- function(
       config$base_seed + index
     )
   })
-  truth <- lapply(simulated, build_multiscale_profile_bundle, config = config)
+  truth <- map_profiles(simulated, function(profile) {
+    build_multiscale_profile_bundle(profile, config)
+  })
   fitted <- NULL
   if (fit_profiles) {
-    fitted <- lapply(seq_along(simulated), function(index) {
+    fitted <- map_profiles(seq_along(simulated), function(index) {
       fit <- fit_within_host_profile(
         simulated[[index]]$observations,
         config,
