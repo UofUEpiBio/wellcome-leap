@@ -118,6 +118,27 @@ creates ignored local weights and metadata used below:
 quarto render reports/ml_experiment.qmd --to gfm
 ```
 
+## Multiscale pARG extension
+
+An optional parallel workflow adds a four-background within-host ODE, synthetic
+qPCR and plasmid-host linkage observations, explicit within- and between-host
+reference/effective reproduction numbers, a summary-coupled carriage ABM, and a
+leave-site-out missing-modality emulator. It models carriage rather than
+clinical infection and leaves the published static app unchanged.
+
+``` sh
+Rscript scripts/06_simulate_multiscale.R 4
+Rscript scripts/07_fit_multiscale.R 3
+Rscript scripts/08_train_multiscale_emulator.R
+quarto render reports/multiscale_experiment.qmd --to gfm
+```
+
+Generated truth, observation, fitted-model, ABM, and emulator artifacts remain
+under ignored `data/derived/` and `artifacts/` paths. The rendered
+[multiscale experiment](reports/multiscale_experiment.md) separates mechanistic
+fitting error from emulator error and records the scientific assumptions that
+the toy implementation exposes.
+
 ## Surrogate architecture
 
 R `torch` has no built-in renderer that turns a module into a picture,
