@@ -120,11 +120,13 @@ quarto render reports/ml_experiment.qmd --to gfm
 
 ## Multiscale pARG extension
 
-An optional parallel workflow adds a four-background within-host ODE, synthetic
-qPCR and plasmid-host linkage observations, explicit within- and between-host
+The multiscale workflow adds a four-background within-host ODE, synthetic qPCR
+and plasmid-host linkage observations, explicit within- and between-host
 reference/effective reproduction numbers, a summary-coupled carriage ABM, and a
-leave-site-out missing-modality emulator. It models carriage rather than
-clinical infection and leaves the published static app unchanged.
+missing-modality emulator. It models carriage rather than clinical infection.
+The final model is trained with every supported synthetic site represented and
+tested on held-out host profiles; a separate leave-site-out diagnostic records
+the current limitation under site shift.
 
 ``` sh
 Rscript scripts/06_simulate_multiscale.R 4
@@ -474,15 +476,19 @@ that gap to a few percent.
 
 ## Prototype application
 
-`app/` is a static, dependency-free web application that carries the
-fitted surrogate and evaluates it in the browser. It is the third piece
-of the prototype: the mechanistic simulation, the missing-modality
-machine-learning component, and a tool that puts the estimate in front of
-a user. It takes the same two attributes as
-[predict_secondary_cases()](R/predict.R) — the agent feature and the
-organism scenario — requires at least one of them, and flags the returned
-individual reproduction number as outbreak potential, borderline, or
-self-limiting.
+`app/` is a static, dependency-free web application that carries both fitted
+surrogates and evaluates them in the browser. Its default multiscale tool maps
+any nonempty combination of quantitative omics, genomic linkage, and clinical
+or epidemiological context to fitted within- and between-host reference and
+effective reproduction numbers. A companion mechanism explorer evaluates the
+simplified ODE-derived equations directly, so the learned estimate can be
+compared with transparent intervention scenarios. Both produce point estimates;
+the prototype does not add Bayesian inference or confidence intervals.
+
+The legacy tab remains available. It takes the same two attributes as
+[predict_secondary_cases()](R/predict.R) — the agent feature and the organism
+scenario — requires at least one of them, and flags the returned individual
+reproduction number as outbreak potential, borderline, or self-limiting.
 
 The page relabels those two attributes for a clinical audience, one
 indicator each and one to one. The agent feature is presented as a
@@ -507,8 +513,8 @@ python3 -m http.server --directory app 8000
 Then open <http://localhost:8000>. A plain `file://` open will not work,
 because the page fetches its JSON at runtime.
 
-The weights travel with the repository as `app/model.json`, written from
-the generated `.pt` weights by:
+The weights for both browser models travel with the repository as
+`app/model.json`, written from the generated `.pt` weights by:
 
 ``` sh
 Rscript scripts/05_export_web_model.R

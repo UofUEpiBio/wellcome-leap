@@ -55,6 +55,57 @@ split_multiscale_by_site <- function(
   )
 }
 
+#' Split multiscale data by profile within every site
+#'
+#' All intervention rows for a profile stay in the same partition. Stratifying
+#' by site ensures a final deployable emulator sees every supported site while
+#' retaining profile-level validation and test sets.
+#'
+#' @param data Emulator-ready profile data.
+#' @param validation_fraction Fraction of profiles per site used for validation.
+#' @param test_fraction Fraction of profiles per site used for testing.
+#' @param seed Random seed controlling profile assignment.
+#'
+#' @return A list containing training, validation, and test data.
+#' @export
+split_multiscale_by_profile <- function(
+    data,
+    validation_fraction = 0.15,
+    test_fraction       = 0.15,
+    seed                = 20260901L
+) {
+  if (validation_fraction <= 0 || test_fraction <= 0 ||
+      validation_fraction + test_fraction >= 1) {
+    stop("Validation and test fractions must be positive and sum to less than one.")
+  }
+  profiles <- unique(data[c("profile_id", "site_id")])
+  set.seed(seed)
+  membership <- lapply(split(profiles$profile_id, profiles$site_id), function(ids) {
+    ids <- sample(ids)
+    n_validation <- max(1L, floor(length(ids) * validation_fraction))
+    n_test <- max(1L, floor(length(ids) * test_fraction))
+    if (n_validation + n_test >= length(ids)) {
+      stop("Each site needs at least three profiles for profile-level splitting.")
+    }
+    data.frame(
+      profile_id = ids,
+      partition = c(
+        rep("validation", n_validation),
+        rep("test", n_test),
+        rep("train", length(ids) - n_validation - n_test)
+      ),
+      stringsAsFactors = FALSE
+    )
+  })
+  membership <- do.call(rbind, membership)
+  partition <- membership$partition[match(data$profile_id, membership$profile_id)]
+  list(
+    train = data[partition == "train", , drop = FALSE],
+    validation = data[partition == "validation", , drop = FALSE],
+    test = data[partition == "test", , drop = FALSE]
+  )
+}
+
 #' Add fixed site indicators to emulator features
 #'
 #' @param data Emulator-ready data.
@@ -194,6 +245,7 @@ create_multiscale_emulator <- function(
 #' @param max_epochs Maximum epochs.
 #' @param patience Early-stopping patience.
 #' @param seed Random seed.
+#' @param partitions Optional precomputed train, validation, and test partitions.
 #'
 #' @return A fitted model bundle with preprocessing, splits, and history.
 #' @export
@@ -206,11 +258,20 @@ fit_multiscale_emulator <- function(
     learning_rate   = 0.01,
     max_epochs      = 200L,
     patience        = 20L,
-    seed            = 20260901L
+    seed            = 20260901L,
+    partitions      = NULL
 ) {
   set.seed(seed)
   torch::torch_manual_seed(seed)
-  split <- split_multiscale_by_site(data, test_site, validation_site)
+  split <- if (is.null(partitions)) {
+    split_multiscale_by_site(data, test_site, validation_site)
+  } else {
+    required <- c("train", "validation", "test")
+    if (!all(required %in% names(partitions))) {
+      stop("partitions must contain train, validation, and test data.")
+    }
+    partitions[required]
+  }
   preprocessor <- fit_multiscale_preprocessor(split$train)
   patterns <- multiscale_observation_patterns()
   target_names <- c("r0_within", "re_within", "r0_between", "re_between")
@@ -277,6 +338,14 @@ fit_multiscale_emulator <- function(
     patterns = patterns,
     target_names = target_names,
     history = do.call(rbind, history[seq_len(epoch)]),
+    training_metadata = list(
+      profiles = length(unique(data$profile_id)),
+      profile_scenarios = nrow(data),
+      augmented_training_rows = nrow(training$x),
+      training_sites = sort(unique(split$train$site_id)),
+      validation_sites = sort(unique(split$validation$site_id)),
+      test_sites = sort(unique(split$test$site_id))
+    ),
     architecture = list(
       input_dim = ncol(training$x),
       hidden_dim_1 = hidden_dim_1,
@@ -364,7 +433,8 @@ save_multiscale_emulator <- function(
   torch::torch_save(object$model$state_dict(), weights_path)
   saveRDS(
     object[c(
-      "preprocessor", "patterns", "target_names", "history", "architecture"
+      "preprocessor", "patterns", "target_names", "history",
+      "training_metadata", "architecture"
     )],
     metadata_path
   )

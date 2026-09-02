@@ -40,6 +40,26 @@ testthat::test_that("leave-site-out split prevents site leakage", {
   testthat::expect_false(any(split$train$site_id %in% c("site_c", "site_d")))
 })
 
+testthat::test_that("profile holdout keeps scenarios together and every site represented", {
+  data <- expand.grid(
+    profile_number = seq_len(5L),
+    site_id = paste0("site_", letters[1:4]),
+    intervention = c("baseline", "shorter_antibiotic", "conjugation_inhibition"),
+    KEEP.OUT.ATTRS = FALSE,
+    stringsAsFactors = FALSE
+  )
+  data$profile_id <- paste(data$site_id, data$profile_number)
+  split <- split_multiscale_by_profile(data, seed = 92L)
+  memberships <- lapply(split, function(partition) unique(partition$profile_id))
+  testthat::expect_length(intersect(memberships$train, memberships$validation), 0L)
+  testthat::expect_length(intersect(memberships$train, memberships$test), 0L)
+  testthat::expect_length(intersect(memberships$validation, memberships$test), 0L)
+  for (partition in split) {
+    testthat::expect_setequal(unique(partition$site_id), paste0("site_", letters[1:4]))
+    testthat::expect_true(all(table(partition$profile_id) == 3L))
+  }
+})
+
 testthat::test_that("multiscale emulator trains and predicts positive metrics", {
   testthat::skip_if_not_installed("torch")
   set.seed(91L)

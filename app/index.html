@@ -46,14 +46,167 @@
         R and R<sub>t</sub> are intentionally out of scope.
       </p>
       <p class="prototype-note">
-        Synthetic mechanism explorer—not a clinical estimate. The fitted multimodal emulator and ABM use these
-        targets in the R pipeline; this browser view evaluates the mechanistic equations directly.
+        Synthetic research prototype—not a clinical estimate. The first tool evaluates the fitted multimodal
+        emulator from whatever observation blocks are available. The second evaluates the mechanistic equations
+        directly so its assumptions and intervention pathways can be inspected.
       </p>
+    </section>
+
+    <section class="card surrogate-card" id="multiscale-estimator">
+      <div class="estimator-head">
+        <p class="section-kicker">Trained observation-to-R surrogate</p>
+        <h2>Estimate from available omic and clinical/context observations</h2>
+        <p class="muted">
+          Supply any nonempty combination of quantitative omics, genomic linkage, and clinical/context data.
+          The exported native-R torch model runs locally in this browser and predicts all four mechanistic
+          reproduction targets. Values are point estimates; Bayesian inference and confidence intervals are
+          intentionally not included in this prototype.
+        </p>
+      </div>
+
+      <div class="surrogate-layout">
+        <form class="surrogate-controls" id="surrogate-controls" autocomplete="off">
+          <fieldset class="control modality-control" id="ml-control-quantitative">
+            <div class="control-head">
+              <div>
+                <legend>Quantitative omics</legend>
+                <p class="control-note">Longitudinal pARG qPCR and species-abundance summaries.</p>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="ml-use-quantitative" checked>
+                <span class="switch-track" aria-hidden="true"></span>
+                <span class="switch-label">Provide</span>
+              </label>
+            </div>
+            <div class="control-body form-grid">
+              <label>Baseline pARG qPCR <span>log<sub>10</sub></span>
+                <input type="number" id="ml-qpcr-baseline" min="2.5" max="10" step="0.1">
+              </label>
+              <label>Peak pARG qPCR <span>log<sub>10</sub></span>
+                <input type="number" id="ml-qpcr-peak" min="2.5" max="10" step="0.1">
+              </label>
+              <label>Day-30 pARG qPCR <span>log<sub>10</sub></span>
+                <input type="number" id="ml-qpcr-day30" min="2.5" max="10" step="0.1">
+              </label>
+              <label>Day-30 <em>E. coli</em> abundance <span>log<sub>10</sub> relative</span>
+                <input type="number" id="ml-ecoli-day30" min="-3" max="0.2" step="0.01">
+              </label>
+              <label>Day-30 <em>Klebsiella</em> abundance <span>log<sub>10</sub> relative</span>
+                <input type="number" id="ml-klebsiella-day30" min="-3" max="0.2" step="0.01">
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset class="control modality-control" id="ml-control-genomic">
+            <div class="control-head">
+              <div>
+                <legend>Genomic linkage</legend>
+                <p class="control-note">Detection of the target pARG on the four modeled bacterial backgrounds.</p>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="ml-use-genomic" checked>
+                <span class="switch-track" aria-hidden="true"></span>
+                <span class="switch-label">Provide</span>
+              </label>
+            </div>
+            <div class="control-body form-grid">
+              <label>Positive linkage detections <span>0–20</span>
+                <input type="number" id="ml-linked-backgrounds" min="0" max="20" step="1">
+              </label>
+              <label>Linkage observations attempted <span>0–20</span>
+                <input type="number" id="ml-linkage-observations" min="0" max="20" step="1">
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset class="control modality-control" id="ml-control-clinical">
+            <div class="control-head">
+              <div>
+                <legend>Clinical and epidemiological context</legend>
+                <p class="control-note">Antibiotic exposure, contact setting, susceptibility, and intervention.</p>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="ml-use-clinical" checked>
+                <span class="switch-track" aria-hidden="true"></span>
+                <span class="switch-label">Provide</span>
+              </label>
+            </div>
+            <div class="control-body form-grid">
+              <label>Synthetic site
+                <select id="ml-site-select"></select>
+              </label>
+              <label>Antibiotic exposure <span>days</span>
+                <input type="number" id="ml-antibiotic-days" min="0" max="14" step="1">
+              </label>
+              <label>Effective contacts <span>per day</span>
+                <input type="number" id="ml-contact-rate" min="0.1" max="0.4" step="0.01">
+              </label>
+              <label>Susceptible fraction <span>0–1</span>
+                <input type="number" id="ml-susceptible-fraction" min="0.5" max="1" step="0.01">
+              </label>
+              <label>Scenario
+                <select id="ml-intervention-select"></select>
+              </label>
+            </div>
+          </fieldset>
+
+          <p class="form-error" id="ml-form-error" role="alert" hidden>
+            Provide at least one observation block for the surrogate.
+          </p>
+        </form>
+
+        <div class="surrogate-results" id="surrogate-results" aria-live="polite">
+          <div class="result-headline">
+            <div>
+              <p class="result-label">Fitted surrogate output</p>
+              <p class="scenario-title" id="ml-pattern-label">All three modalities</p>
+            </div>
+            <span class="computing" id="ml-model-date">—</span>
+          </div>
+          <div class="metric-grid">
+            <article class="metric-card">
+              <p class="metric-level">Within host · reference</p>
+              <p class="metric-name">R<sub>0</sub><sup>WH</sup></p>
+              <p class="metric-value" data-surrogate-metric="r0_within">—</p>
+              <p class="metric-delta" data-surrogate-status="r0_within">—</p>
+            </article>
+            <article class="metric-card">
+              <p class="metric-level">Within host · current</p>
+              <p class="metric-name">R<sub>e</sub><sup>WH</sup></p>
+              <p class="metric-value" data-surrogate-metric="re_within">—</p>
+              <p class="metric-delta" data-surrogate-status="re_within">—</p>
+            </article>
+            <article class="metric-card">
+              <p class="metric-level">Between hosts · reference</p>
+              <p class="metric-name">R<sub>0</sub><sup>BH</sup></p>
+              <p class="metric-value" data-surrogate-metric="r0_between">—</p>
+              <p class="metric-delta" data-surrogate-status="r0_between">—</p>
+            </article>
+            <article class="metric-card">
+              <p class="metric-level">Between hosts · current</p>
+              <p class="metric-name">R<sub>e</sub><sup>BH</sup></p>
+              <p class="metric-value" data-surrogate-metric="re_between">—</p>
+              <p class="metric-delta" data-surrogate-status="re_between">—</p>
+            </article>
+          </div>
+          <p class="threshold-note" id="ml-threshold-note"></p>
+          <dl class="model-provenance">
+            <div><dt>Synthetic profiles</dt><dd id="ml-training-profiles">—</dd></div>
+            <div><dt>Profile/scenario rows</dt><dd id="ml-training-rows">—</dd></div>
+            <div><dt>Held-out RMSE</dt><dd id="ml-heldout-rmse">—</dd></div>
+          </dl>
+          <p class="field-help">
+            RMSE is shown for the selected missing-modality pattern on a profile holdout spanning all four
+            synthetic sites. It is a model-performance diagnostic, not an uncertainty interval for this result.
+          </p>
+        </div>
+      </div>
     </section>
 
     <section class="card multiscale-card" id="multiscale-explorer">
       <div class="estimator-head">
-        <h2>Explore current conditions and interventions</h2>
+        <p class="section-kicker">Direct mechanistic calculation</p>
+        <h2>Inspect assumptions and interventions</h2>
         <p class="muted">
           Choose a synthetic site, then vary the three shared biological parameters and the conditions that
           connect the within-host trajectory to transmission.
@@ -399,16 +552,17 @@
     </section>
 
     <section class="card">
-      <h2>What the two live views demonstrate</h2>
+      <h2>What the live views demonstrate</h2>
       <ol class="pieces">
         <li>
           <span class="piece-index">1</span>
           <div>
             <h3>The multiscale explorer</h3>
             <p>
-              The first tab evaluates the simplified ODE, seed-normalized next-generation matrix, and
-              trajectory-integrated between-host calculation directly in the browser. Its controls match the
-              synthetic configuration used by the R implementation.
+              The first tab offers both promised paths. Its fitted ML surrogate maps any available omic and
+              clinical/context blocks to four reproduction targets. Its mechanism view evaluates the simplified
+              ODE, seed-normalized next-generation matrix, and trajectory-integrated between-host calculation
+              directly in the browser.
             </p>
           </div>
         </li>
@@ -429,8 +583,9 @@
             <h3>The full R workflow</h3>
             <p>
               Scripts keep simulation, fitting/training, and prediction/reporting runnable as separate phases.
-              The browser deliberately avoids committing generated data or fitted multiscale weights; it runs
-              the transparent mechanism instead.
+              The generated training data and native torch files remain untracked. The approved browser export
+              contains both fitted models as ordinary numeric weights, while the transparent mechanism remains
+              available for comparison.
             </p>
           </div>
         </li>
@@ -515,6 +670,7 @@
 </div>
 <script src="model.js"></script>
 <script src="multiscale-model.js"></script>
+<script src="multiscale-surrogate.js"></script>
 <script src="app.js"></script>
 <script src="multiscale-app.js"></script>
 </body>

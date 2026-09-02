@@ -19,19 +19,21 @@ source("../R/multiscale.R")
 study <- readRDS("../data/derived/multiscale/fitted_study.rds")
 truth_targets <- combine_multiscale_targets(study$truth)
 fitted_targets <- combine_multiscale_targets(study$fitted)
-knitr::kable(study$design, row.names = FALSE)
+design_summary <- aggregate(
+  profile_id ~ site_id,
+  study$design,
+  length
+)
+names(design_summary)[2] <- "profiles"
+knitr::kable(design_summary, row.names = FALSE)
 ```
 
-| profile_number | site_id | profile_id |
-|---------------:|:--------|:-----------|
-|              1 | site_a  | site_a_001 |
-|              2 | site_a  | site_a_002 |
-|              1 | site_b  | site_b_001 |
-|              2 | site_b  | site_b_002 |
-|              1 | site_c  | site_c_001 |
-|              2 | site_c  | site_c_002 |
-|              1 | site_d  | site_d_001 |
-|              2 | site_d  | site_d_002 |
+| site_id | profiles |
+|:--------|---------:|
+| site_a  |       25 |
+| site_b  |       25 |
+| site_c  |       25 |
+| site_d  |       25 |
 
 Each of four sites changes the distribution of the three fitted
 parameters, contact rate, susceptible fraction, and structural assay
@@ -46,7 +48,7 @@ knitr::kable(study$simulated[[1]]$observations, digits = 3, row.names = FALSE)
 | site_a_001 | site_a | 0 | 1 | 7.682 | FALSE | -0.301 | -0.670 | TRUE | 1 | 0 | 0 | 0 |
 | site_a_001 | site_a | 3 | 1 | 7.248 | FALSE | -0.271 | -0.287 | TRUE | 1 | 0 | 0 | 1 |
 | site_a_001 | site_a | 7 | 0 | 7.623 | FALSE | -0.200 | -0.475 | TRUE | 1 | 1 | 1 | 1 |
-| site_a_001 | site_a | 14 | 0 | 7.605 | FALSE | -0.037 | -0.495 | TRUE | 1 | 1 | 1 | 1 |
+| site_a_001 | site_a | 14 | 0 | 7.604 | FALSE | -0.037 | -0.495 | TRUE | 1 | 1 | 1 | 1 |
 | site_a_001 | site_a | 30 | 0 | 7.409 | FALSE | -0.238 | -0.393 | TRUE | 1 | 1 | 1 | 0 |
 
 ## Truth, observations, and parameter fitting
@@ -75,35 +77,25 @@ parameter_recovery <- do.call(rbind, Map(
 parameter_recovery$absolute_error <- abs(
   parameter_recovery$fitted - parameter_recovery$truth
 )
-knitr::kable(parameter_recovery, digits = 3, row.names = FALSE)
+parameter_summary <- do.call(rbind, lapply(
+  split(parameter_recovery, parameter_recovery$parameter),
+  function(rows) data.frame(
+    parameter = rows$parameter[1],
+    profiles = nrow(rows),
+    mean_truth = mean(rows$truth),
+    mean_fitted = mean(rows$fitted),
+    rmse = sqrt(mean((rows$fitted - rows$truth)^2)),
+    boundary_fraction = mean(rows$boundary)
+  )
+))
+knitr::kable(parameter_summary, digits = 3, row.names = FALSE)
 ```
 
-| profile_id | site_id | parameter | truth | fitted | converged | boundary | absolute_error |
-|:-----------|:--------|:----------|------:|-------:|:----------|:---------|---------------:|
-| site_a_001 | site_a  | h         | 0.104 |  0.046 | TRUE      | FALSE    |          0.058 |
-| site_a_001 | site_a  | gamma     | 0.124 |  0.060 | TRUE      | FALSE    |          0.064 |
-| site_a_001 | site_a  | delta     | 0.096 |  0.070 | TRUE      | FALSE    |          0.026 |
-| site_a_002 | site_a  | h         | 0.162 |  0.252 | TRUE      | TRUE     |          0.091 |
-| site_a_002 | site_a  | gamma     | 0.082 |  0.160 | TRUE      | TRUE     |          0.078 |
-| site_a_002 | site_a  | delta     | 0.121 |  0.178 | TRUE      | TRUE     |          0.058 |
-| site_b_001 | site_b  | h         | 0.091 |  0.041 | TRUE      | FALSE    |          0.051 |
-| site_b_001 | site_b  | gamma     | 0.109 |  0.061 | TRUE      | FALSE    |          0.048 |
-| site_b_001 | site_b  | delta     | 0.154 |  0.161 | TRUE      | FALSE    |          0.007 |
-| site_b_002 | site_b  | h         | 0.159 |  0.090 | TRUE      | FALSE    |          0.068 |
-| site_b_002 | site_b  | gamma     | 0.089 |  0.045 | TRUE      | FALSE    |          0.045 |
-| site_b_002 | site_b  | delta     | 0.105 |  0.163 | TRUE      | FALSE    |          0.059 |
-| site_c_001 | site_c  | h         | 0.140 |  0.171 | TRUE      | TRUE     |          0.031 |
-| site_c_001 | site_c  | gamma     | 0.086 |  0.160 | TRUE      | TRUE     |          0.074 |
-| site_c_001 | site_c  | delta     | 0.138 |  0.156 | TRUE      | TRUE     |          0.017 |
-| site_c_002 | site_c  | h         | 0.119 |  0.117 | TRUE      | TRUE     |          0.002 |
-| site_c_002 | site_c  | gamma     | 0.056 |  0.040 | TRUE      | TRUE     |          0.016 |
-| site_c_002 | site_c  | delta     | 0.092 |  0.057 | TRUE      | TRUE     |          0.035 |
-| site_d_001 | site_d  | h         | 0.137 |  0.350 | TRUE      | TRUE     |          0.213 |
-| site_d_001 | site_d  | gamma     | 0.074 |  0.160 | TRUE      | TRUE     |          0.086 |
-| site_d_001 | site_d  | delta     | 0.203 |  0.040 | TRUE      | TRUE     |          0.163 |
-| site_d_002 | site_d  | h         | 0.155 |  0.033 | TRUE      | TRUE     |          0.121 |
-| site_d_002 | site_d  | gamma     | 0.075 |  0.040 | TRUE      | TRUE     |          0.035 |
-| site_d_002 | site_d  | delta     | 0.163 |  0.250 | TRUE      | TRUE     |          0.087 |
+| parameter | profiles | mean_truth | mean_fitted |  rmse | boundary_fraction |
+|:----------|---------:|-----------:|------------:|------:|------------------:|
+| delta     |      100 |      0.134 |       0.125 | 0.066 |              0.92 |
+| gamma     |      100 |      0.086 |       0.095 | 0.057 |              0.92 |
+| h         |      100 |      0.149 |       0.161 | 0.088 |              0.92 |
 
 ``` r
 groups <- split(parameter_recovery, parameter_recovery$parameter)
@@ -152,8 +144,8 @@ knitr::kable(example$re$lambda, digits = 3, caption = "Normalized transfer expos
 
 |     |   bg1 |   bg2 |   bg3 |   bg4 |
 |:----|------:|------:|------:|------:|
-| bg1 | 0.000 | 0.571 | 0.206 | 0.217 |
-| bg2 | 0.465 | 0.000 | 0.175 | 0.185 |
+| bg1 | 0.000 | 0.570 | 0.206 | 0.217 |
+| bg2 | 0.464 | 0.000 | 0.175 | 0.185 |
 | bg3 | 0.123 | 0.128 | 0.000 | 0.398 |
 | bg4 | 0.098 | 0.102 | 0.301 | 0.000 |
 
@@ -166,9 +158,9 @@ knitr::kable(example$re$matrix, digits = 3, caption = "Effective within-host nex
 |     |   bg1 |   bg2 |   bg3 |   bg4 |
 |:----|------:|------:|------:|------:|
 | bg1 | 0.000 | 0.329 | 0.134 | 0.141 |
-| bg2 | 0.261 | 0.000 | 0.108 | 0.113 |
+| bg2 | 0.260 | 0.000 | 0.108 | 0.113 |
 | bg3 | 0.071 | 0.074 | 0.000 | 0.212 |
-| bg4 | 0.052 | 0.055 | 0.153 | 0.000 |
+| bg4 | 0.052 | 0.055 | 0.152 | 0.000 |
 
 Effective within-host next-generation matrix
 
@@ -205,19 +197,25 @@ comparison <- fitted_targets[
 ]
 comparison$relative_overstatement <-
   comparison$product_between / comparison$re_between - 1
-knitr::kable(comparison, digits = 3, row.names = FALSE)
+comparison_summary <- aggregate(
+  relative_overstatement ~ site_id,
+  comparison,
+  function(value) c(mean = mean(value), maximum = max(value))
+)
+comparison_summary <- data.frame(
+  site_id = comparison_summary$site_id,
+  mean_overstatement = comparison_summary$relative_overstatement[, "mean"],
+  maximum_overstatement = comparison_summary$relative_overstatement[, "maximum"]
+)
+knitr::kable(comparison_summary, digits = 3, row.names = FALSE)
 ```
 
-| profile_id | site_id | re_between | product_between | relative_overstatement |
-|:-----------|:--------|-----------:|----------------:|-----------------------:|
-| site_a_001 | site_a  |      0.567 |           0.569 |                  0.004 |
-| site_a_002 | site_a  |      4.989 |           5.131 |                  0.029 |
-| site_b_001 | site_b  |      0.949 |           0.959 |                  0.010 |
-| site_b_002 | site_b  |      5.587 |           5.834 |                  0.044 |
-| site_c_001 | site_c  |      1.713 |           1.715 |                  0.002 |
-| site_c_002 | site_c  |      8.110 |           8.964 |                  0.105 |
-| site_d_001 | site_d  |     10.613 |          11.199 |                  0.055 |
-| site_d_002 | site_d  |      3.153 |           3.173 |                  0.006 |
+| site_id | mean_overstatement | maximum_overstatement |
+|:--------|-------------------:|----------------------:|
+| site_a  |              0.016 |                 0.074 |
+| site_b  |              0.044 |                 0.116 |
+| site_c  |              0.051 |                 0.112 |
+| site_d  |              0.035 |                 0.085 |
 
 The stochastic ABM retains realized acquisitions as a diagnostic rather
 than calling one offspring count a reproduction number.
@@ -235,7 +233,7 @@ knitr::kable(abm_summary, digits = 3, row.names = FALSE)
 
 | infected_carriers | realized_acquisitions | mean_realized_acquisitions |
 |------------------:|----------------------:|---------------------------:|
-|               104 |                    99 |                      0.952 |
+|               281 |                   276 |                      0.982 |
 
 ## Paired intervention scenarios
 
@@ -254,52 +252,63 @@ knitr::kable(intervention_summary, digits = 3, row.names = FALSE)
 
 | intervention           | r0_within | re_within | r0_between | re_between |
 |:-----------------------|----------:|----------:|-----------:|-----------:|
-| baseline               |     0.540 |     0.896 |      3.911 |      4.460 |
-| conjugation_inhibition |     0.294 |     0.519 |      0.676 |      1.157 |
-| shorter_antibiotic     |     0.540 |     0.678 |      3.911 |      3.828 |
+| baseline               |     0.704 |     1.059 |      5.222 |      5.413 |
+| conjugation_inhibition |     0.410 |     0.688 |      2.135 |      2.491 |
+| shorter_antibiotic     |     0.704 |     0.859 |      5.222 |      4.929 |
 
 ## Missing-modality emulator
 
-The emulator is trained on fitted mechanistic targets and tested on an
-unseen synthetic site. Errors against fitted targets measure emulation;
-differences between fitted and truth targets measure mechanistic fitting
-error. Neither is a Bayesian uncertainty interval.
+The emulator is trained on fitted mechanistic targets from 100 synthetic
+host profiles and three intervention settings per profile. During model
+development, one model is evaluated on an entirely unseen synthetic
+site. The browser model is then retrained with every site represented
+and evaluated on profiles held out within each site, because the
+deployed interface supports all four site profiles. Errors against
+fitted targets measure emulation; differences between fitted and truth
+targets measure mechanistic fitting error. Neither is a Bayesian
+uncertainty interval or a confidence interval.
 
 ``` r
 evaluation <- readRDS("../artifacts/multiscale_emulator_evaluation.rds")
-knitr::kable(evaluation, digits = 3, row.names = FALSE)
+complete_input <- evaluation[evaluation$pattern == "all", ]
+knitr::kable(complete_input, digits = 3, row.names = FALSE)
 ```
 
-| pattern           | target     |   n |  rmse | balanced_accuracy |
-|:------------------|:-----------|----:|------:|------------------:|
-| all               | r0_within  |   6 | 0.366 |             1.000 |
-| all               | re_within  |   6 | 0.278 |             0.500 |
-| all               | r0_between |   6 | 5.605 |             0.833 |
-| all               | re_between |   6 | 2.832 |             1.000 |
-| no_quantitative   | r0_within  |   6 | 0.366 |             1.000 |
-| no_quantitative   | re_within  |   6 | 0.278 |             0.500 |
-| no_quantitative   | r0_between |   6 | 5.605 |             0.833 |
-| no_quantitative   | re_between |   6 | 2.832 |             1.000 |
-| no_genomic        | r0_within  |   6 | 0.363 |             1.000 |
-| no_genomic        | re_within  |   6 | 0.248 |             0.500 |
-| no_genomic        | r0_between |   6 | 6.207 |             0.500 |
-| no_genomic        | re_between |   6 | 4.228 |             1.000 |
-| no_clinical       | r0_within  |   6 | 0.176 |             1.000 |
-| no_clinical       | re_within  |   6 | 0.227 |             0.500 |
-| no_clinical       | r0_between |   6 | 6.186 |             1.000 |
-| no_clinical       | re_between |   6 | 5.087 |             0.500 |
-| quantitative_only | r0_within  |   6 | 0.265 |             1.000 |
-| quantitative_only | re_within  |   6 | 0.207 |             0.500 |
-| quantitative_only | r0_between |   6 | 6.539 |             0.500 |
-| quantitative_only | re_between |   6 | 5.492 |             1.000 |
-| genomic_only      | r0_within  |   6 | 0.176 |             1.000 |
-| genomic_only      | re_within  |   6 | 0.227 |             0.500 |
-| genomic_only      | r0_between |   6 | 6.186 |             1.000 |
-| genomic_only      | re_between |   6 | 5.087 |             0.500 |
-| clinical_only     | r0_within  |   6 | 0.363 |             1.000 |
-| clinical_only     | re_within  |   6 | 0.248 |             0.500 |
-| clinical_only     | r0_between |   6 | 6.207 |             0.500 |
-| clinical_only     | re_between |   6 | 4.228 |             1.000 |
+| evaluation_scope | pattern | target     |   n |  rmse | balanced_accuracy |
+|:-----------------|:--------|:-----------|----:|------:|------------------:|
+| leave_site_out   | all     | r0_within  |  75 | 0.827 |             0.500 |
+| leave_site_out   | all     | re_within  |  75 | 1.124 |             0.500 |
+| leave_site_out   | all     | r0_between |  75 | 7.034 |             0.500 |
+| leave_site_out   | all     | re_between |  75 | 6.467 |             0.500 |
+| profile_holdout  | all     | r0_within  |  36 | 0.272 |             0.667 |
+| profile_holdout  | all     | re_within  |  36 | 0.353 |             0.803 |
+| profile_holdout  | all     | r0_between |  36 | 2.233 |             0.976 |
+| profile_holdout  | all     | re_between |  36 | 1.856 |             0.978 |
+
+``` r
+profile_missingness <- evaluation[
+  evaluation$evaluation_scope == "profile_holdout" &
+    evaluation$target %in% c("re_within", "re_between"),
+]
+knitr::kable(profile_missingness, digits = 3, row.names = FALSE)
+```
+
+| evaluation_scope | pattern           | target     |   n |  rmse | balanced_accuracy |
+|:-----------------|:------------------|:-----------|----:|------:|------------------:|
+| profile_holdout  | all               | re_within  |  36 | 0.353 |             0.803 |
+| profile_holdout  | all               | re_between |  36 | 1.856 |             0.978 |
+| profile_holdout  | no_quantitative   | re_within  |  36 | 0.510 |             0.709 |
+| profile_holdout  | no_quantitative   | re_between |  36 | 3.322 |             0.875 |
+| profile_holdout  | no_genomic        | re_within  |  36 | 0.595 |             0.666 |
+| profile_holdout  | no_genomic        | re_between |  36 | 3.547 |             0.747 |
+| profile_holdout  | no_clinical       | re_within  |  36 | 0.542 |             0.615 |
+| profile_holdout  | no_clinical       | re_between |  36 | 3.717 |             0.846 |
+| profile_holdout  | quantitative_only | re_within  |  36 | 0.626 |             0.550 |
+| profile_holdout  | quantitative_only | re_between |  36 | 4.079 |             0.615 |
+| profile_holdout  | genomic_only      | re_within  |  36 | 0.673 |             0.435 |
+| profile_holdout  | genomic_only      | re_between |  36 | 4.774 |             0.846 |
+| profile_holdout  | clinical_only     | re_within  |  36 | 0.709 |             0.550 |
+| profile_holdout  | clinical_only     | re_between |  36 | 4.528 |             0.600 |
 
 ``` r
 matched <- merge(
@@ -323,10 +332,10 @@ knitr::kable(fitting_error, digits = 3, row.names = FALSE)
 
 | target     |  rmse |
 |:-----------|------:|
-| r0_within  | 0.163 |
-| re_within  | 0.240 |
-| r0_between | 3.049 |
-| re_between | 2.395 |
+| r0_within  | 0.368 |
+| re_within  | 0.506 |
+| r0_between | 3.994 |
+| re_between | 3.409 |
 
 ## Scientific limitations exposed by the prototype
 
@@ -340,6 +349,10 @@ knitr::kable(fitting_error, digits = 3, row.names = FALSE)
 - Deterministic ODEs do not represent rare-transfer extinction.
 - Point fitting does not propagate mechanistic uncertainty into the
   emulator.
+- Leave-site-out performance remains weak because the synthetic sites
+  differ in both biological parameter distributions and structural
+  modality availability; the browser model is a functional
+  demonstration, not a validated predictor for an unseen setting.
 - The four-versus-five Peru sample schedule, Hi-C detection limit, and
   transfer subscript inconsistency require confirmation before empirical
   use.

@@ -9,7 +9,8 @@ or external network call.
 | --- | --- |
 | `index.html` | Page structure and all narrative text. |
 | `styles.css` | Single stylesheet, light theme, no build step. |
-| `model.js` | The forward pass, mirroring `masked_count_net` in `R/torch_model.R`. |
+| `model.js` | The legacy forward pass, mirroring `masked_count_net` in `R/torch_model.R`. |
+| `multiscale-surrogate.js` | The observation-to-R forward pass for the exported multiscale emulator. |
 | `app.js` | Shared tabs plus legacy-surrogate inputs, flagging, and response curve. |
 | `model.json` | Exported weights and preprocessing constants. **Generated.** |
 | `site.json` | Editable presentation settings. |
@@ -30,8 +31,11 @@ that over `file://`.
 
 ## Multiscale explorer
 
-The default tab evaluates the same simplified equations as `R/within_host.R`
-and `R/reproduction.R`. It reports four targets:
+The default tab has two complementary tools. The fitted multiscale surrogate
+maps any nonempty combination of quantitative omics, genomic linkage, and
+clinical/epidemiological context to four reproduction targets. The direct
+mechanism explorer evaluates the same simplified equations as
+`R/within_host.R` and `R/reproduction.R`:
 
 - within-host reference and effective R, from a seed-normalized first-generation
   matrix of successful pARG acquisition on new bacterial backgrounds; and
@@ -41,10 +45,12 @@ and `R/reproduction.R`. It reports four targets:
 
 Reference values remove antibiotic exposure and set the between-host
 susceptible fraction to one. The explorer does not calculate population-level R
-or R(t). It is synthetic and explanatory, not a clinical decision tool. The R
-pipeline remains the source for simulation, fitting, ABM experiments, native-R
-torch emulation, and rendered reports; the browser evaluates the mechanism
-directly so no generated multiscale data or weights need to be committed.
+or R(t). Both tools are synthetic and explanatory, not clinical decision
+tools. The R pipeline remains the source for simulation, fitting, ABM
+experiments, native-R torch emulation, and rendered reports. Native `.pt`
+weights and generated datasets remain untracked; their browser-ready numeric
+weights are included under the `multiscale` key in the single approved
+`app/model.json` export.
 
 `multiscale.json` mirrors `default_multiscale_config()` and
 `multiscale_site_table()`. A test guards their shared values. Keep the JavaScript
@@ -52,15 +58,17 @@ equations synchronized when the corresponding R equations change.
 
 ## Regenerating the model
 
-`model.json` is written from the generated torch weights:
+`model.json` is written from both generated torch models. Train the legacy
+surrogate with `scripts/04_fit_and_evaluate.R`, train the multiscale surrogate
+with `scripts/08_train_multiscale_emulator.R`, then export both:
 
 ```sh
 Rscript scripts/05_export_web_model.R
 ```
 
-The script checks a `torch`-free forward pass against `torch` before writing, so
-a mismatch fails loudly rather than shipping wrong numbers. Re-run it after any
-retraining; nothing else in the app needs to change.
+The script checks both `torch`-free forward passes against `torch` before
+writing, so a mismatch fails loudly rather than shipping wrong numbers. Re-run
+it after either model is retrained; nothing else in the app needs to change.
 
 ## Page layout
 

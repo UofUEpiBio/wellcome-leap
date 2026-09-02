@@ -104,3 +104,65 @@ testthat::test_that("the browser multiscale configuration mirrors the R model", 
     config$inoculum_kappa
   )
 })
+
+testthat::test_that("the multiscale web export reproduces torch predictions", {
+  testthat::skip_if_not_installed("torch")
+  data <- expand.grid(
+    site_id = paste0("site_", letters[1:4]),
+    profile_number = seq_len(4L),
+    intervention = c("baseline", "shorter_antibiotic", "conjugation_inhibition"),
+    KEEP.OUT.ATTRS = FALSE,
+    stringsAsFactors = FALSE
+  )
+  data$profile_id <- paste(data$site_id, data$profile_number)
+  fields <- c(
+    "qpcr_baseline", "qpcr_peak", "qpcr_day30", "ecoli_day30",
+    "klebsiella_day30", "linked_backgrounds", "linkage_observations",
+    "antibiotic_days", "contact_rate", "susceptible_fraction",
+    "conjugation_multiplier"
+  )
+  set.seed(93L)
+  for (field in fields) data[[field]] <- stats::runif(nrow(data))
+  for (target in c("r0_within", "re_within", "r0_between", "re_between")) {
+    data[[target]] <- exp(stats::rnorm(nrow(data), 0, 0.2))
+  }
+  fit <- fit_multiscale_emulator(
+    data,
+    hidden_dim_1 = 8L,
+    hidden_dim_2 = 4L,
+    max_epochs = 4L,
+    patience = 2L,
+    partitions = split_multiscale_by_profile(data, seed = 93L)
+  )
+  web <- extract_multiscale_web_model(fit)
+  input <- make_multiscale_input_matrix(
+    fit$split$test,
+    fit$patterns$all,
+    fit$preprocessor
+  )
+  fit$model$eval()
+  torch::with_no_grad({
+    expected <- exp(as.matrix(fit$model(torch::torch_tensor(
+      input,
+      dtype = torch::torch_float()
+    ))))
+  })
+  testthat::expect_equal(
+    unname(predict_multiscale_web_model(web, input)),
+    unname(expected),
+    tolerance = 1e-6
+  )
+  testthat::expect_equal(web$target_names, fit$target_names)
+})
+
+testthat::test_that("the shipped browser model contains both fitted surrogates", {
+  testthat::skip_if_not_installed("jsonlite")
+  path <- file.path("..", "..", "app", "model.json")
+  testthat::skip_if_not(file.exists(path))
+  model <- jsonlite::fromJSON(path, simplifyVector = FALSE)
+  testthat::expect_true(all(c("layers", "multiscale") %in% names(model)))
+  testthat::expect_setequal(
+    unlist(model$multiscale$target_names),
+    c("r0_within", "re_within", "r0_between", "re_between")
+  )
+})
