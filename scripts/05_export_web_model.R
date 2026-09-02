@@ -8,6 +8,7 @@ source("R/masking.R")
 source("R/torch_model.R")
 source("R/fit_models.R")
 source("R/export_web_model.R")
+source("R/multimodal_emulator.R")
 
 weights_path <- "artifacts/masked_model.pt"
 metadata_path <- "artifacts/masked_model_metadata.rds"
@@ -38,3 +39,49 @@ largest_gap <- max(vapply(patterns, function(pattern) {
 cat("Wrote", path, "\n")
 cat("Largest torch-versus-base-R gap:", format(largest_gap, digits = 3), "\n")
 if (largest_gap > 1e-5) stop("Base R forward pass does not match torch.")
+
+multiscale_weights <- "artifacts/multiscale_emulator.pt"
+multiscale_metadata <- "artifacts/multiscale_emulator_metadata.rds"
+multiscale_evaluation <- "artifacts/multiscale_emulator_evaluation.rds"
+if (!file.exists(multiscale_weights) || !file.exists(multiscale_metadata)) {
+  stop("Run scripts/08_train_multiscale_emulator.R before exporting the app.")
+}
+multiscale_fit <- load_multiscale_emulator(
+  multiscale_weights,
+  multiscale_metadata
+)
+multiscale_results <- if (file.exists(multiscale_evaluation)) {
+  readRDS(multiscale_evaluation)
+} else {
+  NULL
+}
+export_multiscale_web_model(
+  multiscale_fit,
+  path,
+  evaluation = multiscale_results
+)
+multiscale_web <- extract_multiscale_web_model(multiscale_fit)
+multiscale_input <- matrix(
+  seq(-1, 1, length.out = multiscale_fit$architecture$input_dim * 3L),
+  nrow = 3L
+)
+multiscale_fit$model$eval()
+torch::with_no_grad({
+  multiscale_torch <- exp(as.matrix(multiscale_fit$model(torch::torch_tensor(
+    multiscale_input,
+    dtype = torch::torch_float()
+  ))))
+})
+multiscale_gap <- max(abs(
+  multiscale_torch -
+    predict_multiscale_web_model(multiscale_web, multiscale_input)
+))
+cat("Appended multiscale weights to", path, "\n")
+cat(
+  "Largest multiscale torch-versus-base-R gap:",
+  format(multiscale_gap, digits = 3),
+  "\n"
+)
+if (multiscale_gap > 1e-5) {
+  stop("Base R multiscale forward pass does not match torch.")
+}

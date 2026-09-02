@@ -118,6 +118,51 @@ creates ignored local weights and metadata used below:
 quarto render reports/ml_experiment.qmd --to gfm
 ```
 
+## Multiscale pARG extension
+
+The multiscale workflow adds a four-background within-host ODE, synthetic qPCR
+and plasmid-host linkage observations, explicit within- and between-host
+reference/effective reproduction numbers, a summary-coupled carriage ABM, and a
+missing-modality emulator. It models carriage rather than clinical infection.
+The final model is trained with every supported synthetic site represented and
+tested on held-out host profiles; a separate leave-site-out diagnostic records
+the current limitation under site shift. Training uses every nonempty modality
+mask and a validation-selected combination of log-scale and target-standardized
+raw-scale loss.
+
+``` sh
+Rscript scripts/06_simulate_multiscale.R 4 1
+Rscript scripts/07_fit_multiscale.R 1 1 100
+Rscript scripts/08_train_multiscale_emulator.R
+quarto render reports/multiscale_experiment.qmd --to gfm
+```
+
+Those commands are a quick four-profile-per-site smoke run. To reproduce the
+4,000-profile model shipped in `app/model.json`, use:
+
+``` sh
+Rscript scripts/06_simulate_multiscale.R 1000 2
+Rscript scripts/07_fit_multiscale.R 1 2 100
+Rscript scripts/08_train_multiscale_emulator.R
+Rscript scripts/05_export_web_model.R
+quarto render reports/multiscale_experiment.qmd --to gfm
+```
+
+Generated truth, observation, fitted-model, ABM, and emulator artifacts remain
+under ignored `data/derived/` and `artifacts/` paths. The rendered
+[multiscale experiment](reports/multiscale_experiment.md) separates mechanistic
+fitting error from emulator error and records the scientific assumptions that
+the toy implementation exposes.
+
+The optional second argument to the simulation and fitting scripts is the
+number of independent profile workers. On non-Windows systems, values above
+one use a base R `parallel::makeForkCluster()`; the default remains one worker.
+The fitting script accepts a third, optional batch-size argument (default 100)
+to bound worker-result memory. Two workers are recommended on an 18 GB machine.
+Completed batches are checkpointed beneath the ignored
+`data/derived/multiscale/fit_checkpoints/` directory, so an interrupted fit can
+resume without committing generated artifacts.
+
 ## Surrogate architecture
 
 R `torch` has no built-in renderer that turns a module into a picture,
@@ -453,15 +498,19 @@ that gap to a few percent.
 
 ## Prototype application
 
-`app/` is a static, dependency-free web application that carries the
-fitted surrogate and evaluates it in the browser. It is the third piece
-of the prototype: the mechanistic simulation, the missing-modality
-machine-learning component, and a tool that puts the estimate in front of
-a user. It takes the same two attributes as
-[predict_secondary_cases()](R/predict.R) — the agent feature and the
-organism scenario — requires at least one of them, and flags the returned
-individual reproduction number as outbreak potential, borderline, or
-self-limiting.
+`app/` is a static, dependency-free web application that carries both fitted
+surrogates and evaluates them in the browser. Its default multiscale tool maps
+any nonempty combination of quantitative omics, genomic linkage, and clinical
+or epidemiological context to fitted within- and between-host reference and
+effective reproduction numbers. A companion mechanism explorer evaluates the
+simplified ODE-derived equations directly, so the learned estimate can be
+compared with transparent intervention scenarios. Both produce point estimates;
+the prototype does not add Bayesian inference or confidence intervals.
+
+The legacy tab remains available. It takes the same two attributes as
+[predict_secondary_cases()](R/predict.R) — the agent feature and the organism
+scenario — requires at least one of them, and flags the returned individual
+reproduction number as outbreak potential, borderline, or self-limiting.
 
 The page relabels those two attributes for a clinical audience, one
 indicator each and one to one. The agent feature is presented as a
@@ -486,8 +535,8 @@ python3 -m http.server --directory app 8000
 Then open <http://localhost:8000>. A plain `file://` open will not work,
 because the page fetches its JSON at runtime.
 
-The weights travel with the repository as `app/model.json`, written from
-the generated `.pt` weights by:
+The weights for both browser models travel with the repository as
+`app/model.json`, written from the generated `.pt` weights by:
 
 ``` sh
 Rscript scripts/05_export_web_model.R

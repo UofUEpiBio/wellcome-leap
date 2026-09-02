@@ -93,6 +93,191 @@ predict_web_model <- function(
   as.numeric(values) + web_model$architecture$output_offset
 }
 
+#' Extract a multiscale emulator for dependency-free inference
+#'
+#' Converts the native R `torch` emulator and its preprocessing metadata into
+#' plain numeric structures suitable for JSON serialization. The exported
+#' network predicts the logarithms of four reproduction metrics.
+#'
+#' @param object Fitted or loaded multiscale emulator.
+#' @param evaluation Optional held-out evaluation table.
+#' @param source_label Free-text provenance label.
+#'
+#' @return A named list containing layers, preprocessing, targets, provenance,
+#'   and optional evaluation results.
+#' @export
+extract_multiscale_web_model <- function(
+    object,
+    evaluation   = NULL,
+    source_label = "artifacts/multiscale_emulator.pt"
+) {
+  state <- lapply(object$model$state_dict(), function(tensor) {
+    as.array(tensor$to(device = "cpu"))
+  })
+  layer_names <- c("hidden_1", "hidden_2", "output")
+  expected_state <- as.vector(outer(layer_names, c("weight", "bias"), paste, sep = "."))
+  missing_state <- setdiff(expected_state, names(state))
+  if (length(missing_state)) {
+    stop(
+      "The multiscale model is missing required state entries: ",
+      paste(missing_state, collapse = ", ")
+    )
+  }
+  layers <- lapply(layer_names, function(layer) {
+    weight <- state[[paste0(layer, ".weight")]]
+    list(
+      units = nrow(weight),
+      inputs = ncol(weight),
+      weight = as.numeric(t(weight)),
+      bias = as.numeric(state[[paste0(layer, ".bias")]])
+    )
+  })
+  names(layers) <- layer_names
+  blocks <- lapply(object$preprocessor$blocks, as.character)
+  patterns <- lapply(object$patterns, as.character)
+  result <- list(
+    layers = layers,
+    preprocessor = list(
+      blocks = blocks,
+      feature_names = as.character(object$preprocessor$feature_names),
+      center = as.list(object$preprocessor$center),
+      scale = as.list(object$preprocessor$scale),
+      input_columns = c(
+        as.character(object$preprocessor$feature_names),
+        paste0(names(blocks), "_observed")
+      )
+    ),
+    patterns = patterns,
+    target_names = as.character(object$target_names),
+    architecture = list(
+      input_dim = as.integer(object$architecture$input_dim),
+      hidden_dim_1 = as.integer(object$architecture$hidden_dim_1),
+      hidden_dim_2 = as.integer(object$architecture$hidden_dim_2),
+      output_dim = length(object$target_names),
+      activation = "relu",
+      output_activation = "exp",
+      raw_loss_weight = if (is.null(object$architecture$raw_loss_weight)) {
+        0
+      } else {
+        as.numeric(object$architecture$raw_loss_weight)
+      }
+    ),
+    generated = list(
+      source = source_label,
+      date = format(Sys.Date()),
+      targets = as.character(object$target_names),
+      training = object$training_metadata
+    )
+  )
+  if (!is.null(evaluation)) {
+    evaluation_fields <- c(
+      intersect("evaluation_scope", names(evaluation)),
+      "pattern", "target", "n", "rmse", "balanced_accuracy"
+    )
+    result$evaluation <- evaluation[
+      evaluation_fields
+    ]
+  }
+  result
+}
+
+#' Evaluate an exported multiscale network in base R
+#'
+#' @param web_model Plain multiscale structure returned by
+#'   [extract_multiscale_web_model()].
+#' @param input Numeric input matrix after multiscale preprocessing.
+#'
+#' @return A numeric matrix of positive reproduction-number predictions.
+#' @export
+predict_multiscale_web_model <- function(
+    web_model,
+    input
+) {
+  dense <- function(
+      values,
+      layer,
+      relu = TRUE
+  ) {
+    weight <- matrix(
+      layer$weight,
+      nrow = layer$units,
+      ncol = layer$inputs,
+      byrow = TRUE
+    )
+    output <- values %*% t(weight) + rep(layer$bias, each = nrow(values))
+    if (relu) pmax(output, 0) else output
+  }
+  values <- dense(input, web_model$layers$hidden_1)
+  values <- dense(values, web_model$layers$hidden_2)
+  values <- dense(values, web_model$layers$output, relu = FALSE)
+  result <- exp(values)
+  colnames(result) <- web_model$target_names
+  result
+}
+
+#' Append a multiscale emulator to the approved browser model export
+#'
+#' The original surrogate remains at the top level of `app/model.json`; the
+#' multiscale export is stored under its `multiscale` key. This keeps the single
+#' approved committed weight artifact while supporting both browser models.
+#'
+#' @param object Fitted or loaded multiscale emulator.
+#' @param path Existing browser-model JSON path.
+#' @param evaluation Optional held-out evaluation table.
+#' @param source_label Free-text provenance label.
+#'
+#' @return The updated path, invisibly.
+#' @export
+export_multiscale_web_model <- function(
+    object,
+    path         = "app/model.json",
+    evaluation   = NULL,
+    source_label = "artifacts/multiscale_emulator.pt"
+) {
+  if (!requireNamespace("jsonlite", quietly = TRUE)) {
+    stop("The jsonlite package is required to write the web model export.")
+  }
+  if (!file.exists(path)) {
+    stop("Export the legacy browser model before appending the multiscale model.")
+  }
+  root <- jsonlite::fromJSON(path, simplifyVector = FALSE)
+  multiscale <- extract_multiscale_web_model(object, evaluation, source_label)
+  multiscale$layers <- lapply(multiscale$layers, function(layer) {
+    layer$weight <- I(layer$weight)
+    layer$bias <- I(layer$bias)
+    layer
+  })
+  multiscale$preprocessor$feature_names <- I(
+    multiscale$preprocessor$feature_names
+  )
+  multiscale$preprocessor$input_columns <- I(
+    multiscale$preprocessor$input_columns
+  )
+  multiscale$preprocessor$blocks <- lapply(
+    multiscale$preprocessor$blocks,
+    I
+  )
+  multiscale$patterns <- lapply(multiscale$patterns, I)
+  multiscale$target_names <- I(multiscale$target_names)
+  multiscale$generated$targets <- I(multiscale$generated$targets)
+  for (field in c("training_sites", "validation_sites", "test_sites")) {
+    if (!is.null(multiscale$generated$training[[field]])) {
+      multiscale$generated$training[[field]] <- I(
+        multiscale$generated$training[[field]]
+      )
+    }
+  }
+  root$multiscale <- multiscale
+  jsonlite::write_json(
+    root,
+    path,
+    digits = 12,
+    auto_unbox = TRUE,
+    pretty = 2
+  )
+  invisible(path)
+}
+
 #' Write the browser-ready model export
 #'
 #' Serializes the fitted weights and preprocessing constants as a small JSON

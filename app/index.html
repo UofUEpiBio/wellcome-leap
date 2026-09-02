@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AMPLIFY — Individual Transmission Risk Explorer</title>
-<meta name="description" content="Functional prototype estimating an individual reproduction number from partially observed inputs, built for the Wellcome Leap AMPLIFY proposal.">
+<title>AMPLIFY — Multiscale pARG Re Explorer</title>
+<meta name="description" content="Functional prototype connecting within-host pARG dynamics, effective reproduction numbers, interventions, and an individual transmission surrogate.">
 <link rel="stylesheet" href="styles.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧫</text></svg>">
 </head>
@@ -13,24 +13,344 @@
 
   <header class="masthead">
     <p class="eyebrow"><span data-site="programme">Wellcome Leap</span> · <span data-site="consortium">AMPLIFY</span></p>
-    <h1 data-site="app_name">Individual Transmission Risk Explorer</h1>
+    <h1 data-site="app_name">Multiscale pARG Re Explorer</h1>
     <p class="lede" data-site="tagline"></p>
   </header>
 
   <nav class="tabs" role="tablist" aria-label="Sections">
+    <button type="button" role="tab" id="tab-multiscale" data-tab="multiscale"
+      aria-controls="panel-multiscale" aria-selected="true">Multiscale explorer</button>
     <button type="button" role="tab" id="tab-estimator" data-tab="estimator"
-      aria-controls="panel-estimator" aria-selected="true">Estimator</button>
+      aria-controls="panel-estimator" aria-selected="false">Legacy surrogate</button>
     <button type="button" role="tab" id="tab-method" data-tab="method"
       aria-controls="panel-method" aria-selected="false">How it works</button>
   </nav>
 
   <!-- ------------------------------------------------------------------ -->
-  <section class="panel" id="panel-estimator" role="tabpanel" aria-labelledby="tab-estimator">
+  <section class="panel" id="panel-multiscale" role="tabpanel" aria-labelledby="tab-multiscale">
+
+    <section class="card intro">
+      <p class="section-kicker">New multiscale prototype</p>
+      <h2>Follow a resistance plasmid within a host and between hosts</h2>
+      <p>
+        This mechanism explorer connects the new pieces of the repository. A simplified ODE tracks a plasmid
+        across four bacterial backgrounds. Genomic linkage identifies which background acquired it;
+        quantitative omics measures its abundance; and clinical context supplies antibiotic exposure and
+        contact conditions. Those inputs determine two distinct effective reproduction numbers.
+      </p>
+      <p>
+        <strong>Within-host R<sub>e</sub></strong> is the expected number of new bacterial backgrounds reached
+        by one introduced donor lineage. <strong>Between-host R<sub>e</sub></strong> is the expected number of
+        secondary colonisations caused by one carrier, integrating their complete within-host trajectory.
+        Reference values remove antibiotic exposure and set between-host susceptibility to one. Population-level
+        R and R<sub>t</sub> are intentionally out of scope.
+      </p>
+      <p class="prototype-note">
+        Synthetic research prototype—not a clinical estimate. The first tool evaluates the fitted multimodal
+        emulator from whatever observation blocks are available. The second evaluates the mechanistic equations
+        directly so its assumptions and intervention pathways can be inspected.
+      </p>
+    </section>
+
+    <section class="card surrogate-card" id="multiscale-estimator">
+      <div class="estimator-head">
+        <p class="section-kicker">Trained observation-to-R surrogate</p>
+        <h2>Estimate from available omic and clinical/context observations</h2>
+        <p class="muted">
+          Supply any nonempty combination of quantitative omics, genomic linkage, and clinical/context data.
+          The exported native-R torch model runs locally in this browser and predicts all four mechanistic
+          reproduction targets. Values are point estimates; Bayesian inference and confidence intervals are
+          intentionally not included in this prototype.
+        </p>
+      </div>
+
+      <div class="surrogate-layout">
+        <form class="surrogate-controls" id="surrogate-controls" autocomplete="off">
+          <fieldset class="control modality-control" id="ml-control-quantitative">
+            <div class="control-head">
+              <div>
+                <legend>Quantitative omics</legend>
+                <p class="control-note">Longitudinal pARG qPCR and species-abundance summaries.</p>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="ml-use-quantitative" checked>
+                <span class="switch-track" aria-hidden="true"></span>
+                <span class="switch-label">Provide</span>
+              </label>
+            </div>
+            <div class="control-body form-grid">
+              <label>Baseline pARG qPCR <span>log<sub>10</sub></span>
+                <input type="number" id="ml-qpcr-baseline" min="2.5" max="10" step="0.1">
+              </label>
+              <label>Peak pARG qPCR <span>log<sub>10</sub></span>
+                <input type="number" id="ml-qpcr-peak" min="2.5" max="10" step="0.1">
+              </label>
+              <label>Day-30 pARG qPCR <span>log<sub>10</sub></span>
+                <input type="number" id="ml-qpcr-day30" min="2.5" max="10" step="0.1">
+              </label>
+              <label>Day-30 <em>E. coli</em> abundance <span>log<sub>10</sub> relative</span>
+                <input type="number" id="ml-ecoli-day30" min="-3" max="0.2" step="0.01">
+              </label>
+              <label>Day-30 <em>Klebsiella</em> abundance <span>log<sub>10</sub> relative</span>
+                <input type="number" id="ml-klebsiella-day30" min="-3" max="0.2" step="0.01">
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset class="control modality-control" id="ml-control-genomic">
+            <div class="control-head">
+              <div>
+                <legend>Genomic linkage</legend>
+                <p class="control-note">Detection of the target pARG on the four modeled bacterial backgrounds.</p>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="ml-use-genomic" checked>
+                <span class="switch-track" aria-hidden="true"></span>
+                <span class="switch-label">Provide</span>
+              </label>
+            </div>
+            <div class="control-body form-grid">
+              <label>Positive linkage detections <span>0–20</span>
+                <input type="number" id="ml-linked-backgrounds" min="0" max="20" step="1">
+              </label>
+              <label>Linkage observations attempted <span>0–20</span>
+                <input type="number" id="ml-linkage-observations" min="0" max="20" step="1">
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset class="control modality-control" id="ml-control-clinical">
+            <div class="control-head">
+              <div>
+                <legend>Clinical and epidemiological context</legend>
+                <p class="control-note">Antibiotic exposure, contact setting, susceptibility, and intervention.</p>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="ml-use-clinical" checked>
+                <span class="switch-track" aria-hidden="true"></span>
+                <span class="switch-label">Provide</span>
+              </label>
+            </div>
+            <div class="control-body form-grid">
+              <label>Synthetic site
+                <select id="ml-site-select"></select>
+              </label>
+              <label>Antibiotic exposure <span>days</span>
+                <input type="number" id="ml-antibiotic-days" min="0" max="14" step="1">
+              </label>
+              <label>Effective contacts <span>per day</span>
+                <input type="number" id="ml-contact-rate" min="0.1" max="0.4" step="0.01">
+              </label>
+              <label>Susceptible fraction <span>0–1</span>
+                <input type="number" id="ml-susceptible-fraction" min="0.5" max="1" step="0.01">
+              </label>
+              <label>Scenario
+                <select id="ml-intervention-select"></select>
+              </label>
+            </div>
+          </fieldset>
+
+          <p class="form-error" id="ml-form-error" role="alert" hidden>
+            Provide at least one observation block for the surrogate.
+          </p>
+        </form>
+
+        <div class="surrogate-results" id="surrogate-results" aria-live="polite">
+          <div class="result-headline">
+            <div>
+              <p class="result-label">Fitted surrogate output</p>
+              <p class="scenario-title" id="ml-pattern-label">All three modalities</p>
+            </div>
+            <span class="computing" id="ml-model-date">—</span>
+          </div>
+          <div class="metric-grid">
+            <article class="metric-card">
+              <p class="metric-level">Within host · reference</p>
+              <p class="metric-name">R<sub>0</sub><sup>WH</sup></p>
+              <p class="metric-value" data-surrogate-metric="r0_within">—</p>
+              <p class="metric-delta" data-surrogate-status="r0_within">—</p>
+            </article>
+            <article class="metric-card">
+              <p class="metric-level">Within host · current</p>
+              <p class="metric-name">R<sub>e</sub><sup>WH</sup></p>
+              <p class="metric-value" data-surrogate-metric="re_within">—</p>
+              <p class="metric-delta" data-surrogate-status="re_within">—</p>
+            </article>
+            <article class="metric-card">
+              <p class="metric-level">Between hosts · reference</p>
+              <p class="metric-name">R<sub>0</sub><sup>BH</sup></p>
+              <p class="metric-value" data-surrogate-metric="r0_between">—</p>
+              <p class="metric-delta" data-surrogate-status="r0_between">—</p>
+            </article>
+            <article class="metric-card">
+              <p class="metric-level">Between hosts · current</p>
+              <p class="metric-name">R<sub>e</sub><sup>BH</sup></p>
+              <p class="metric-value" data-surrogate-metric="re_between">—</p>
+              <p class="metric-delta" data-surrogate-status="re_between">—</p>
+            </article>
+          </div>
+          <p class="threshold-note" id="ml-threshold-note"></p>
+          <dl class="model-provenance">
+            <div><dt>Synthetic profiles</dt><dd id="ml-training-profiles">—</dd></div>
+            <div><dt>Profile/scenario rows</dt><dd id="ml-training-rows">—</dd></div>
+            <div><dt>Held-out RMSE</dt><dd id="ml-heldout-rmse">—</dd></div>
+          </dl>
+          <p class="field-help">
+            RMSE is shown for the selected missing-modality pattern on a profile holdout spanning all four
+            synthetic sites. It is a model-performance diagnostic, not an uncertainty interval for this result.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card multiscale-card" id="multiscale-explorer">
+      <div class="estimator-head">
+        <p class="section-kicker">Direct mechanistic calculation</p>
+        <h2>Inspect assumptions and interventions</h2>
+        <p class="muted">
+          Choose a synthetic site, then vary the three shared biological parameters and the conditions that
+          connect the within-host trajectory to transmission.
+        </p>
+      </div>
+
+      <div class="multiscale-layout">
+        <form class="mechanism-controls" id="mechanism-controls" autocomplete="off">
+          <div class="field">
+            <div class="field-head">
+              <label class="field-label" for="site-select">Synthetic site profile</label>
+              <span class="chip" id="site-modalities">—</span>
+            </div>
+            <select id="site-select"></select>
+            <p class="field-help">Site choice resets contact conditions and applies its parameter multipliers.</p>
+          </div>
+
+          <div class="parameter-group">
+            <p class="parameter-group-title">Within-host biology</p>
+            <div class="field compact-field">
+              <div class="field-head">
+                <label class="field-label" for="h-slider">Horizontal transfer rate, h</label>
+                <output class="inline-readout" id="h-readout"></output>
+              </div>
+              <input type="range" id="h-slider">
+            </div>
+            <div class="field compact-field">
+              <div class="field-head">
+                <label class="field-label" for="gamma-slider">Segregational loss at division, γ</label>
+                <output class="inline-readout" id="gamma-readout"></output>
+              </div>
+              <input type="range" id="gamma-slider">
+            </div>
+            <div class="field compact-field">
+              <div class="field-head">
+                <label class="field-label" for="delta-slider">Antibiotic selection, δ</label>
+                <output class="inline-readout" id="delta-readout"></output>
+              </div>
+              <input type="range" id="delta-slider">
+            </div>
+          </div>
+
+          <div class="parameter-group">
+            <p class="parameter-group-title">Current host-to-host conditions</p>
+            <div class="field compact-field">
+              <div class="field-head">
+                <label class="field-label" for="antibiotic-slider">Antibiotic exposure</label>
+                <output class="inline-readout" id="antibiotic-readout"></output>
+              </div>
+              <input type="range" id="antibiotic-slider">
+            </div>
+            <div class="field compact-field">
+              <div class="field-head">
+                <label class="field-label" for="contact-slider">Effective contacts per day</label>
+                <output class="inline-readout" id="contact-readout"></output>
+              </div>
+              <input type="range" id="contact-slider">
+            </div>
+            <div class="field compact-field">
+              <div class="field-head">
+                <label class="field-label" for="susceptible-slider">Susceptible fraction</label>
+                <output class="inline-readout" id="susceptible-readout"></output>
+              </div>
+              <input type="range" id="susceptible-slider">
+            </div>
+          </div>
+
+          <fieldset class="intervention-fieldset">
+            <legend>Scenario to display</legend>
+            <div class="intervention-choice" id="intervention-choice" role="radiogroup"
+              aria-label="Intervention scenario"></div>
+            <p class="field-help" id="intervention-note"></p>
+          </fieldset>
+        </form>
+
+        <div class="mechanism-results" aria-live="polite" aria-busy="true" id="mechanism-results">
+          <div class="result-headline">
+            <div>
+              <p class="result-label">Selected scenario</p>
+              <p class="scenario-title" id="selected-scenario">Current conditions</p>
+            </div>
+            <span class="computing" id="computing-status">Calculating…</span>
+          </div>
+
+          <div class="metric-grid">
+            <article class="metric-card" id="metric-r0-within">
+              <p class="metric-level">Within host · reference</p>
+              <p class="metric-name">R<sub>0</sub><sup>WH</sup></p>
+              <p class="metric-value" data-metric="r0Within">—</p>
+              <p class="metric-delta" data-delta="r0Within">—</p>
+            </article>
+            <article class="metric-card" id="metric-re-within">
+              <p class="metric-level">Within host · current</p>
+              <p class="metric-name">R<sub>e</sub><sup>WH</sup></p>
+              <p class="metric-value" data-metric="reWithin">—</p>
+              <p class="metric-delta" data-delta="reWithin">—</p>
+            </article>
+            <article class="metric-card" id="metric-r0-between">
+              <p class="metric-level">Between hosts · reference</p>
+              <p class="metric-name">R<sub>0</sub><sup>BH</sup></p>
+              <p class="metric-value" data-metric="r0Between">—</p>
+              <p class="metric-delta" data-delta="r0Between">—</p>
+            </article>
+            <article class="metric-card" id="metric-re-between">
+              <p class="metric-level">Between hosts · current</p>
+              <p class="metric-name">R<sub>e</sub><sup>BH</sup></p>
+              <p class="metric-value" data-metric="reBetween">—</p>
+              <p class="metric-delta" data-delta="reBetween">—</p>
+            </article>
+          </div>
+
+          <p class="threshold-note" id="threshold-note"></p>
+
+          <details class="matrix-details">
+            <summary>Inspect the current within-host next-generation matrix</summary>
+            <p>
+              Rows are recipient backgrounds and columns are donor backgrounds. Each entry is the probability
+              that one introduced donor lineage establishes the pARG on that new background. The diagonal is
+              zero because persistence on the original background is not a new acquisition.
+            </p>
+            <div class="table-wrap">
+              <table class="matrix-table" id="matrix-table"></table>
+            </div>
+          </details>
+
+          <div class="trajectory-note">
+            <p><strong>Trajectory integration matters.</strong> Between-host R<sub>e</sub> integrates
+              <code>1 − exp(−κp(t))</code> over carriage rather than substituting average abundance.</p>
+            <p>Product-form comparator: <strong id="product-comparator">—</strong> · Simulated carriage:
+              <strong id="carriage-duration">—</strong> days.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </section>
+
+  <!-- ------------------------------------------------------------------ -->
+  <section class="panel" id="panel-estimator" role="tabpanel" aria-labelledby="tab-estimator" hidden>
 
     <section class="card intro">
       <h2>What this tool is</h2>
       <p>
-        This page was created by our team for the <strong data-site="programme">Wellcome Leap</strong>
+        This original page was created by our team for the <strong data-site="programme">Wellcome Leap</strong>
         <strong data-site="consortium">AMPLIFY</strong> proposal. It is a <strong>functional prototype</strong>:
         every number it shows comes from a model we actually fitted, evaluated in your browser, not from a
         mock-up. A user supplies whatever they have — a colonisation density, an organism identification, or
@@ -155,6 +475,56 @@
   <section class="panel" id="panel-method" role="tabpanel" aria-labelledby="tab-method" hidden>
 
     <section class="card">
+      <h2>How omics, the ODE, ML, and the ABM connect</h2>
+      <ol class="pieces">
+        <li>
+          <span class="piece-index">1</span>
+          <div>
+            <h3>Omics supplies observations, not R directly</h3>
+            <p>
+              Synthetic qPCR and relative-abundance measurements describe pARG burden. Genomic linkage says
+              whether the same pARG has appeared on a new bacterial background. Clinical context supplies
+              antibiotic exposure, contacts, and the susceptible fraction.
+            </p>
+          </div>
+        </li>
+        <li>
+          <span class="piece-index">2</span>
+          <div>
+            <h3>The ODE turns observations into biological parameters</h3>
+            <p>
+              The simplified fit estimates three shared quantities: horizontal transfer <em>h</em>,
+              division-coupled segregational loss <em>γ</em>, and antibiotic selection <em>δ</em>. Four genomic
+              backgrounds make the linkage matrix informative without making the first fit unidentifiable.
+            </p>
+          </div>
+        </li>
+        <li>
+          <span class="piece-index">3</span>
+          <div>
+            <h3>The fitted mechanism defines the learning targets</h3>
+            <p>
+              A seed-normalized next-generation matrix yields within-host reference and effective R. The
+              within-host resistant-fraction trajectory is integrated with contacts and susceptibility to
+              yield between-host reference and effective R. These are expectations, not realized event counts.
+            </p>
+          </div>
+        </li>
+        <li>
+          <span class="piece-index">4</span>
+          <div>
+            <h3>ML makes those targets available when modalities are missing</h3>
+            <p>
+              The native-R torch emulator learns the four mechanistic targets under deliberate modality
+              masking. The ABM receives the fitted biological parameters and represents contacts and paired
+              interventions; it does not need ML to rediscover the ODE.
+            </p>
+          </div>
+        </li>
+      </ol>
+    </section>
+
+    <section class="card">
       <h2>The architecture this prototype demonstrates</h2>
       <figure class="diagram">
         <a class="diagram-link" href="ml-diagram.jpeg" target="_blank" rel="noopener"
@@ -171,52 +541,51 @@
           layer</strong> then cuts streams at random during training, so the network has to learn to read
           whichever ones survive rather than depending on all of them. <strong>Cross-modal fusion</strong>
           combines the survivors into a single fused representation, and the <strong>prediction head</strong>
-          maps that to the individual reproduction number.
+          maps that to the multiscale reproduction targets.
         </figcaption>
         <p class="diagram-note">
-          This is the design the full project builds. The model behind the estimator implements the same
-          dropout-and-fuse principle at prototype scale — two inputs, and a small dense network in place of
-          the transformer — which is what already lets it estimate with a modality missing.
+          This is the design the full project builds. The new R pipeline implements the same principle with
+          native R torch and blockwise masking. The legacy surrogate uses two inputs and a small dense network,
+          which is why it can already demonstrate estimation with one modality missing.
         </p>
       </figure>
     </section>
 
     <section class="card">
-      <h2>The three pieces this prototype joins</h2>
+      <h2>What the live views demonstrate</h2>
       <ol class="pieces">
         <li>
           <span class="piece-index">1</span>
           <div>
-            <h3>The mechanistic model</h3>
+            <h3>The multiscale explorer</h3>
             <p>
-              A stochastic agent-based SEIR simulation of two antibiotic-resistant organisms. Each simulated
-              individual carries a feature that shifts their per-contact transmission probability, so the
-              simulation produces a <em>realized</em> number of secondary infections for every infected agent.
+              The first tab offers both promised paths. Its fitted ML surrogate maps any available omic and
+              clinical/context blocks to four reproduction targets. Its mechanism view evaluates the simplified
+              ODE, seed-normalized next-generation matrix, and trajectory-integrated between-host calculation
+              directly in the browser.
             </p>
           </div>
         </li>
         <li>
           <span class="piece-index">2</span>
           <div>
-            <h3>The machine-learning component</h3>
+            <h3>The legacy surrogate</h3>
             <p>
-              A count-regression neural network trained on those simulated individuals, using
-              <strong>multimodal input with deliberate information loss</strong>: during training, each row
-              randomly keeps both inputs, the individual feature alone, or the organism alone. The model
-              therefore stays usable when a modality is missing, instead of failing or silently imputing it.
-              The two organisms are weighted equally during training, so an estimate made from one modality
-              genuinely averages over the other.
+              The second tab preserves the originally published two-input neural surrogate. It is useful for
+              demonstrating deliberate information loss and browser-side inference, but it is not presented as
+              the multiscale model or as evidence about a real organism.
             </p>
           </div>
         </li>
         <li>
           <span class="piece-index">3</span>
           <div>
-            <h3>The application</h3>
+            <h3>The full R workflow</h3>
             <p>
-              The estimator on the first tab. It carries the fitted weights directly and evaluates them
-              locally, which is how the delivered tool is intended to feel: a practitioner supplies whatever
-              they have, and gets an interpretable estimate back immediately.
+              Scripts keep simulation, fitting/training, and prediction/reporting runnable as separate phases.
+              The generated training data and native torch files remain untracked. The approved browser export
+              contains both fitted models as ordinary numeric weights, while the transparent mechanism remains
+              available for comparison.
             </p>
           </div>
         </li>
@@ -232,7 +601,7 @@
       <h2>How the two indicators map onto the model</h2>
       <p>
         The fitted surrogate takes exactly two things, and the estimator exposes exactly those two. The
-        mapping is one to one, so any estimate on the first tab can be traced straight back to a row of the
+        mapping is one to one, so any estimate on the legacy tab can be traced straight back to a row of the
         training data:
       </p>
       <div class="table-wrap">
@@ -252,7 +621,7 @@
       </p>
       <p>
         The organism choice is a relabelling of the same kind: the simulation calibrates a lower- and a
-        higher-transmission organism, near population reproduction numbers of 1.5 and 3.0, and the page names
+        higher-transmission organism under two illustrative transmission settings, and the page names
         them so the contrast is concrete. The estimates are not organism-specific evidence about either
         species, and the density scale is illustrative rather than fitted to patient data.
       </p>
@@ -300,6 +669,9 @@
 
 </div>
 <script src="model.js"></script>
+<script src="multiscale-model.js"></script>
+<script src="multiscale-surrogate.js"></script>
 <script src="app.js"></script>
+<script src="multiscale-app.js"></script>
 </body>
 </html>
