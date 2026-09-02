@@ -215,11 +215,11 @@
     return window.location.hash.replace("#", "");
   }
 
-  /** Show one tab panel, falling back to the estimator for an unknown name. */
+  /** Show one tab panel, falling back to the multiscale explorer. */
   function selectTab(name, scrollToTop) {
     const tabs = Array.prototype.slice.call(document.querySelectorAll("[role=tab]"));
     const known = tabs.some(function (tab) { return tab.dataset.tab === name; });
-    const target = known ? name : "estimator";
+    const target = known ? name : "multiscale";
     tabs.forEach(function (tab) {
       const active = tab.dataset.tab === target;
       tab.setAttribute("aria-selected", active ? "true" : "false");

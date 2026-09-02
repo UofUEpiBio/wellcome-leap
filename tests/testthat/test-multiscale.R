@@ -19,6 +19,23 @@ testthat::test_that("breakpoint-aware ODE integration is stable and nonnegative"
   testthat::expect_equal(coarse, fine, tolerance = 1e-3)
 })
 
+testthat::test_that("ODE integration restarts exactly after a breakpoint", {
+  treatment_derivative <- function(
+      time,
+      state
+  ) {
+    stats::setNames(antibiotic_activity(time, 0, 1), names(state))
+  }
+  trajectory <- rk4_piecewise(
+    treatment_derivative,
+    initial_state = c(exposure = 0),
+    output_times = c(0, 1, 2),
+    step = 0.1,
+    breakpoints = c(0, 1)
+  )
+  testthat::expect_equal(trajectory$exposure, c(0, 1, 1), tolerance = 1e-12)
+})
+
 testthat::test_that("transfer and division-associated loss affect intended states", {
   config <- default_multiscale_config()
   no_transfer <- config$truth_center

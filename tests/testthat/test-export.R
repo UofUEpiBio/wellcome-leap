@@ -70,3 +70,37 @@ testthat::test_that("the shipped export matches the shipped scenarios", {
     all(offered %in% names(model$preprocessor$scenario_levels))
   )
 })
+
+testthat::test_that("the browser multiscale configuration mirrors the R model", {
+  testthat::skip_if_not_installed("jsonlite")
+  path <- file.path("..", "..", "app", "multiscale.json")
+  testthat::skip_if_not(file.exists(path))
+  browser <- jsonlite::fromJSON(path)
+  config <- default_multiscale_config()
+  sites <- multiscale_site_table()
+
+  testthat::expect_equal(browser$backgrounds$id, config$backgrounds$background)
+  testthat::expect_equal(
+    browser$backgrounds$growth_rate,
+    config$backgrounds$growth_rate
+  )
+  testthat::expect_equal(
+    browser$backgrounds$fitness_cost,
+    config$backgrounds$fitness_cost
+  )
+  testthat::expect_equal(browser$omega, unname(config$omega))
+  testthat::expect_equal(
+    browser$backgrounds$establishment,
+    unname(config$within_establishment)
+  )
+  testthat::expect_equal(browser$sites$id, sites$site_id)
+  testthat::expect_equal(browser$sites$contact_rate, sites$contact_rate)
+  testthat::expect_equal(
+    browser$sites$susceptible_fraction,
+    sites$susceptible_fraction
+  )
+  testthat::expect_equal(
+    browser$mechanism$inoculum_kappa,
+    config$inoculum_kappa
+  )
+})

@@ -1,0 +1,60 @@
+{
+  "version": "1.0",
+  "description": "Synthetic configuration for the browser-based multiscale pARG mechanism explorer.",
+  "backgrounds": [
+    {"id": "bg1", "species": "E. coli", "growth_rate": 0.80, "fitness_cost": 0.08, "initial_share": 0.32, "establishment": 0.70},
+    {"id": "bg2", "species": "E. coli", "growth_rate": 0.76, "fitness_cost": 0.10, "initial_share": 0.28, "establishment": 0.65},
+    {"id": "bg3", "species": "K. pneumoniae", "growth_rate": 0.70, "fitness_cost": 0.07, "initial_share": 0.22, "establishment": 0.60},
+    {"id": "bg4", "species": "K. pneumoniae", "growth_rate": 0.66, "fitness_cost": 0.09, "initial_share": 0.18, "establishment": 0.55}
+  ],
+  "omega": [
+    [0.75, 1.00, 0.35, 0.35],
+    [1.00, 0.75, 0.35, 0.35],
+    [0.35, 0.35, 0.75, 1.00],
+    [0.35, 0.35, 1.00, 0.75]
+  ],
+  "sites": [
+    {"id": "site_a", "label": "Site A", "h_multiplier": 0.80, "gamma_multiplier": 1.15, "delta_multiplier": 0.85, "contact_rate": 0.18, "susceptible_fraction": 0.96, "modalities": "Genomic + quantitative"},
+    {"id": "site_b", "label": "Site B", "h_multiplier": 1.00, "gamma_multiplier": 1.00, "delta_multiplier": 1.10, "contact_rate": 0.22, "susceptible_fraction": 0.92, "modalities": "Genomic + quantitative"},
+    {"id": "site_c", "label": "Site C", "h_multiplier": 1.20, "gamma_multiplier": 0.90, "delta_multiplier": 1.00, "contact_rate": 0.28, "susceptible_fraction": 0.88, "modalities": "Quantitative only"},
+    {"id": "site_d", "label": "Site D", "h_multiplier": 1.35, "gamma_multiplier": 0.80, "delta_multiplier": 1.25, "contact_rate": 0.32, "susceptible_fraction": 0.84, "modalities": "Genomic only"}
+  ],
+  "defaults": {
+    "site": "site_b",
+    "h": 0.13,
+    "gamma": 0.09,
+    "delta": 0.13,
+    "antibiotic_days": 7,
+    "contact_rate": 0.22,
+    "susceptible_fraction": 0.92,
+    "intervention": "baseline"
+  },
+  "ranges": {
+    "h": {"min": 0.03, "max": 0.35, "step": 0.01},
+    "gamma": {"min": 0.04, "max": 0.16, "step": 0.005},
+    "delta": {"min": 0.04, "max": 0.25, "step": 0.01},
+    "antibiotic_days": {"min": 0, "max": 14, "step": 1},
+    "contact_rate": {"min": 0.10, "max": 0.40, "step": 0.01},
+    "susceptible_fraction": {"min": 0.50, "max": 1.00, "step": 0.01}
+  },
+  "interventions": [
+    {"id": "baseline", "label": "Current conditions", "description": "Use the values shown in the controls."},
+    {"id": "shorter_antibiotic", "label": "3-day course", "description": "Shorten antibiotic exposure to at most three days."},
+    {"id": "conjugation_inhibition", "label": "Conjugation inhibition", "description": "Reduce the horizontal-transfer rate by 50%."}
+  ],
+  "mechanism": {
+    "carrying_capacity": 1,
+    "initial_total": 0.92,
+    "initial_resistant": 0.025,
+    "initial_donor": "bg1",
+    "antibiotic_start": 0,
+    "carriage_horizon": 120,
+    "ngm_horizon": 365,
+    "ode_step": 0.10,
+    "ngm_step": 0.25,
+    "ngm_seed": 0.000001,
+    "between_establishment": 0.55,
+    "inoculum_kappa": 2.5,
+    "carriage_detection": 0.00001
+  }
+}

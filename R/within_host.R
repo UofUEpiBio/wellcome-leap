@@ -148,6 +148,7 @@ rk4_piecewise <- function(
       state[state < 0] <- 0
       current <- current + dt
     }
+    current <- boundary
     if (boundary %in% output_times) {
       records[[length(records) + 1L]] <- c(time = boundary, state)
     }

@@ -1,16 +1,21 @@
 # Prototype application
 
-A static, dependency-free page that carries the fitted AMPLIFY surrogate and
-evaluates it in the browser. No build step, no framework, no network calls.
+A static, dependency-free page with two functional views: a transparent
+multiscale pARG mechanism explorer and the original fitted AMPLIFY surrogate.
+Both run in the browser. There is no build step, framework, server component,
+or external network call.
 
 | File | Role |
 | --- | --- |
 | `index.html` | Page structure and all narrative text. |
 | `styles.css` | Single stylesheet, light theme, no build step. |
 | `model.js` | The forward pass, mirroring `masked_count_net` in `R/torch_model.R`. |
-| `app.js` | Tabs, input handling, the feature mapping, flagging, and the response curve. |
+| `app.js` | Shared tabs plus legacy-surrogate inputs, flagging, and response curve. |
 | `model.json` | Exported weights and preprocessing constants. **Generated.** |
 | `site.json` | Editable presentation settings. |
+| `multiscale-model.js` | Dependency-free ODE and reproduction-number calculations mirroring the R implementation. |
+| `multiscale-app.js` | Controls and rendering for the multiscale explorer. |
+| `multiscale.json` | Deliberately small synthetic mechanism, site, and intervention configuration. |
 | `ml-diagram.jpeg` | Architecture figure shown on the **How it works** tab. |
 
 ## Running it locally
@@ -20,8 +25,30 @@ python3 -m http.server --directory app 8000
 ```
 
 Then open <http://localhost:8000>. Opening `index.html` straight from disk does
-not work: the page fetches `model.json` and `site.json` at runtime, and browsers
-block that over `file://`.
+not work: the page fetches its JSON configuration at runtime, and browsers block
+that over `file://`.
+
+## Multiscale explorer
+
+The default tab evaluates the same simplified equations as `R/within_host.R`
+and `R/reproduction.R`. It reports four targets:
+
+- within-host reference and effective R, from a seed-normalized first-generation
+  matrix of successful pARG acquisition on new bacterial backgrounds; and
+- between-host reference and effective R, from the time integral of the
+  within-host resistant fraction, contact rate, establishment, and current
+  susceptible fraction.
+
+Reference values remove antibiotic exposure and set the between-host
+susceptible fraction to one. The explorer does not calculate population-level R
+or R(t). It is synthetic and explanatory, not a clinical decision tool. The R
+pipeline remains the source for simulation, fitting, ABM experiments, native-R
+torch emulation, and rendered reports; the browser evaluates the mechanism
+directly so no generated multiscale data or weights need to be committed.
+
+`multiscale.json` mirrors `default_multiscale_config()` and
+`multiscale_site_table()`. A test guards their shared values. Keep the JavaScript
+equations synchronized when the corresponding R equations change.
 
 ## Regenerating the model
 
@@ -37,12 +64,11 @@ retraining; nothing else in the app needs to change.
 
 ## Page layout
 
-The page has two tabs, driven entirely by `app.js`: **Estimator**, which opens
-with a short statement of what the tool is and then the tool itself, and
-**How it works**, which opens with the architecture figure and then carries the
-three-piece description, the indicator mapping, and the scope of the full
-version. The tab is reflected in the URL fragment (`#estimator`, `#method`), so
-either view can be linked directly.
+The page has three tabs. **Multiscale explorer** is the default mechanistic
+view, **Legacy surrogate** preserves the originally published two-input model,
+and **How it works** explains how omics, the ODE, ML, and the ABM connect. The tab
+is reflected in the URL fragment (`#multiscale`, `#estimator`, `#method`), so any
+view can be linked directly.
 
 `ml-diagram.jpeg` is a compressed copy of `fig/ml-diagram.jpeg`, kept inside
 `app/` because the Pages workflow publishes this directory alone. Regenerate it
